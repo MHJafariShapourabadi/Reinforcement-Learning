@@ -1,2 +1,2 @@
-# Reinforcement-Learning-Intro-PyTorch
-Implementation of  Reinforcement Learning algorithms with PyTorch
+# Reinforcement Learning Algorithms
+Implementation of  Reinforcement Learning algorithms with Python and PyTorch
