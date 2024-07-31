@@ -1,14 +1,14 @@
-from ._greedy import Greedy
+from . import Greedy
 
 import numpy as np
 import gymnasium as gym
 
 class EpsilonGreedy(Greedy):
-    def __init__(self, epsilon, epsilon_decay_rate=0.0, seed=None):
+    def __init__(self, epsilon, epsilon_decay=0.0, seed=None):
         super(EpsilonGreedy, self).__init__(seed=seed)
         self.initial_epsilon = epsilon
         self.epsilon = epsilon
-        self.epsilon_decay_rate = epsilon_decay_rate
+        self.epsilon_decay = epsilon_decay
         
 
     def choose_action(self, action_space:gym.spaces.Discrete, state: int, qtable: np.ndarray, mask: np.ndarray | None=None)  -> int:
@@ -34,7 +34,7 @@ class EpsilonGreedy(Greedy):
 
 
     def decay_epsilon(self, episode):
-        self.epsilon = self.initial_epsilon / (1.0 + self.epsilon_decay_rate * episode)
+        self.epsilon = self.initial_epsilon / (1.0 + self.epsilon_decay * episode)
 
 
     def reset_epsilon(self):

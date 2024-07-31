@@ -1,4 +1,4 @@
-from ._epsilon_greedy import EpsilonGreedy
+from . import EpsilonGreedy
 
 import numpy as np
 import gymnasium as gym
