@@ -1,5 +1,5 @@
 from rl_algorithms.tabular.exploration import Greedy, EpsilonGreedy, SoftMax
-from rl_algorithms.tabular.agents import PolicyIteration
+from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration
 
 from environments.frozen_lake.utils import *
 
@@ -85,6 +85,7 @@ st_all = pd.DataFrame()
 
 agents = [
     PolicyIteration(env, gamma=params.gamma, threshold1=1e-4, threshold2=1e-15), # gamma should never be 1 for Policy Iteration because it may not converge
+    ValueIteration(env, gamma=params.gamma, threshold=1e-4),
 ]
 
 explorer = EpsilonGreedy(

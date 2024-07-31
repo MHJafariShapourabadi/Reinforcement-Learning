@@ -71,17 +71,16 @@ class PolicyIteration(Agent):
 
                     if delta < self.threshold1:
                         break
+                
+                # Log all rewards and steps
+                rewards[episode, run] = total_rewards
+                steps[episode, run] = step
 
                 if np.max(np.abs(self.qtable - old_qtable)) < self.threshold2:
                     break
 
                 self.update_policy(seed=seed)
-
-
-                # Log all rewards and steps
-                rewards[episode, run] = total_rewards
-                steps[episode, run] = step
-                                
+             
             qtables[run, :, :] = self.qtable
 
         return rewards, steps, episodes, qtables, all_states, all_actions
