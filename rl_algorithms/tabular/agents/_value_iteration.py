@@ -1,4 +1,5 @@
 from . import Agent
+from ..exploration import Greedy
 
 import numpy as np
 
@@ -28,6 +29,7 @@ class ValueIteration(Agent):
         qtables = np.zeros((n_runs, self.state_size, self.action_size))
         all_states = []
         all_actions = []
+        explorer = Greedy(seed=seed)
 
         for run in range(n_runs):  # Run several times to account for stochasticity
             self.reset_qtable(self.initial_qtable)  # Reset the Q-table between runs
@@ -51,7 +53,7 @@ class ValueIteration(Agent):
                         all_actions.append(action)
 
                         # Take the action (a) and observe the outcome state(s') and reward (r)
-                        new_state, reward, terminated, truncated, info = self.env.step(self.policy[new_state])
+                        new_state, reward, terminated, truncated, info = self.env.step(explorer.choose_action(action_space=self.env.action_space, state=new_state, qtable=self.qtable, mask=self.mask))
 
                         old_qvalue = self.qtable[state, action]
 
@@ -72,8 +74,8 @@ class ValueIteration(Agent):
                 if delta < self.threshold:
                     break
             
-                self.update_policy(seed=seed)
-
             qtables[run, :, :] = self.qtable
+
+            self.update_policy(seed=seed)
 
         return rewards, steps, episodes, qtables, all_states, all_actions

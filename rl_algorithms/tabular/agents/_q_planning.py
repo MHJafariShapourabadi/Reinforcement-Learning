@@ -1,4 +1,5 @@
 from . import Agent
+from ..exploration import Greedy
 
 import numpy as np
 
@@ -53,13 +54,12 @@ class QPlanning(Agent):
             self.reset_qtable(self.initial_qtable)  # Reset the Q-table between runs
             self.reset_policy()
             self.reset_learning_rate()
-            explorer.reset_epsilon()
+            explorer = Greedy(seed=seed)
 
             for episode in tqdm(
                 episodes, desc=f"Run {run}/{n_runs} - Episodes", leave=False
             ):
                 self.decay_learning_rate(episode)
-                explorer.decay_epsilon(episode)
                 
                 new_state = self.env.reset(seed=seed)[0]  # Reset the environment
                 step = 0
@@ -76,7 +76,7 @@ class QPlanning(Agent):
                     all_states.append(state)
                     all_actions.append(action)
                     # Take the action (a) and observe the outcome state(s') and reward (r)
-                    new_state, new_reward, terminated, truncated, info = self.env.step(self.policy[new_state])
+                    new_state, new_reward, terminated, truncated, info = self.env.step(explorer.choose_action(action_space=self.env.action_space, state=new_state, qtable=self.qtable, mask=self.mask))
                     
                     old_qvalue = self.qtable[state, action]
                     
@@ -98,8 +98,8 @@ class QPlanning(Agent):
                 if Delta < self.threshold:
                     break
 
-                self.update_policy(seed=seed)
-
             qtables[run, :, :] = self.qtable
+
+            self.update_policy(seed=seed)
 
         return rewards, steps, episodes, qtables, all_states, all_actions
