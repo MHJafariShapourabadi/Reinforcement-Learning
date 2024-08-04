@@ -1,5 +1,5 @@
 from rl_algorithms.tabular.exploration import Greedy, EpsilonGreedy, SoftMax
-from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, MonteCarloOnPolicy
+from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, QPlanning, MonteCarloOnPolicy
 
 from environments.frozen_lake.utils import *
 
@@ -84,10 +84,11 @@ res_all = pd.DataFrame()
 st_all = pd.DataFrame()
 
 agents = [
-    PolicyIteration(env, gamma=params.gamma, threshold1=1e-4, threshold2=1e-15), # gamma should never be 1 for Policy Iteration because it may not converge
-    ValueIteration(env, gamma=params.gamma, threshold=1e-4),
-    RTDP(env, gamma=params.gamma),
-    MonteCarloOnPolicy(env, learning_rate=params.learning_rate, gamma=params.gamma, first_vist=False),
+    # PolicyIteration(env, gamma=params.gamma, threshold1=1e-4, threshold2=1e-15), # gamma should never be 1 for Policy Iteration because it may not converge
+    # ValueIteration(env, gamma=params.gamma, threshold=1e-4),
+    # RTDP(env, gamma=params.gamma),
+    # QPlanning(env, learning_rate=params.learning_rate, gamma=params.gamma, threshold=1e-4, n_planning=1000),
+    # MonteCarloOnPolicy(env, learning_rate=params.learning_rate, gamma=params.gamma, first_vist=False),
 ]
 
 explorer = EpsilonGreedy(
