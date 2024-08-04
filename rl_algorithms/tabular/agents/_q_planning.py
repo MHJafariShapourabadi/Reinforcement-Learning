@@ -52,10 +52,15 @@ class QPlanning(Agent):
         for run in range(n_runs):  # Run several times to account for stochasticity
             self.reset_qtable(self.initial_qtable)  # Reset the Q-table between runs
             self.reset_policy()
+            self.reset_learning_rate()
+            explorer.reset_epsilon()
 
             for episode in tqdm(
                 episodes, desc=f"Run {run}/{n_runs} - Episodes", leave=False
             ):
+                self.decay_learning_rate(episode)
+                explorer.decay_epsilon(episode)
+                
                 new_state = self.env.reset(seed=seed)[0]  # Reset the environment
                 step = 0
                 done = False
