@@ -8,7 +8,7 @@ class Greedy:
 
     def choose_action(self, action_space:gym.spaces.Discrete, state: int, qtable: np.ndarray, mask: np.ndarray | None=None) -> int:
         if mask is None:
-            mask = np.ones_like(qtable)
+            mask = np.ones_like(qtable).astype(np.int8)
 
         action = self.argmax(qtable[state, :], mask[state, :])
 

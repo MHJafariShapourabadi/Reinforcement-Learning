@@ -17,7 +17,7 @@ class EpsilonGreedy(Greedy):
         explore_exploit_tradeoff = self.rng.uniform(0, 1)
 
         if mask is None:
-            mask = np.ones_like(qtable)
+            mask = np.ones_like(qtable).astype(np.int8)
 
         # Exploration
         if explore_exploit_tradeoff < self.epsilon:

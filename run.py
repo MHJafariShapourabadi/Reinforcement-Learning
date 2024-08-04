@@ -1,5 +1,5 @@
 from rl_algorithms.tabular.exploration import Greedy, EpsilonGreedy, SoftMax
-from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, MonteCarloOnPolicy
+from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, MonteCarloOnPolicy
 
 from environments.frozen_lake.utils import *
 
@@ -38,7 +38,7 @@ class Params(NamedTuple):
 
 
 params = Params(
-    total_episodes=20000,
+    total_episodes=2000,
     learning_rate=0.8,
     learning_rate_decay=0.0,
     gamma=0.95,
@@ -86,7 +86,8 @@ st_all = pd.DataFrame()
 agents = [
     PolicyIteration(env, gamma=params.gamma, threshold1=1e-4, threshold2=1e-15), # gamma should never be 1 for Policy Iteration because it may not converge
     ValueIteration(env, gamma=params.gamma, threshold=1e-4),
-    MonteCarloOnPolicy(env, learning_rate=params.learning_rate, gamma=params.gamma, first_vist=False)
+    RTDP(env, gamma=params.gamma),
+    MonteCarloOnPolicy(env, learning_rate=params.learning_rate, gamma=params.gamma, first_vist=False),
 ]
 
 explorer = EpsilonGreedy(
