@@ -1,6 +1,6 @@
 from rl_algorithms.tabular.exploration import Greedy, EpsilonGreedy, SoftMax
 from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, QPlanning, MonteCarloOnPolicy, \
-    Sarsa, ExpectedSarsa, QLearning, DoubleQLearning
+    Sarsa, ExpectedSarsa, QLearning, DoubleQLearning, NStepSarsa, NStepExpectedSarsa
 
 from environments.frozen_lake.utils import *
 
@@ -39,7 +39,7 @@ class Params(NamedTuple):
 
 
 params = Params(
-    total_episodes=5000,
+    total_episodes=10000,
     learning_rate=0.5,
     learning_rate_decay=0.0,
     gamma=0.95,
@@ -93,7 +93,9 @@ agents = [
     # Sarsa(env, learning_rate=params.learning_rate, gamma=params.gamma),
     # ExpectedSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma),
     # QLearning(env, learning_rate=params.learning_rate, gamma=params.gamma),
-    DoubleQLearning(env, learning_rate=params.learning_rate, gamma=params.gamma),
+    # DoubleQLearning(env, learning_rate=params.learning_rate, gamma=params.gamma),
+    # NStepSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
+    NStepExpectedSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
 ]
 
 explorer = EpsilonGreedy(

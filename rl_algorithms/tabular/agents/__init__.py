@@ -8,6 +8,8 @@ from ._sarsa import Sarsa
 from ._expected_sarsa import ExpectedSarsa
 from ._q_learning import QLearning
 from ._double_q_learning import DoubleQLearning
+from ._n_step_sarsa import NStepSarsa
+from ._n_step_expected_sarsa import NStepExpectedSarsa
 
 __all__ = ["Agent", "PolicyIteration", "ValueIteration", "RTDP", "MonteCarloOnPolicy", "QPlanning", "Sarsa",
-"ExpectedSarsa", "QLearning", "DoubleQLearning"]
+"ExpectedSarsa", "QLearning", "DoubleQLearning", "NStepSarsa", "NStepExpectedSarsa"]
