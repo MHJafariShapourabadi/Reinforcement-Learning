@@ -21,8 +21,8 @@ class QPlanningModel:
 
 
 class QPlanning(Agent):
-    def __init__(self, env, learning_rate, gamma, threshold, n_planning, initial_qtable=None, seed=None):
-        super(QPlanning, self).__init__(env=env, learning_rate=learning_rate, gamma=gamma, initial_qtable=initial_qtable)
+    def __init__(self, env, learning_rate, gamma, learning_rate_dacay=0.0, initial_qtable=None):
+        super(QPlanning, self).__init__(env=env, learning_rate=learning_rate, gamma=gamma, learning_rate_dacay=learning_rate_dacay, initial_qtable=initial_qtable)
         self.threshold = threshold
         self.n_planning = n_planning
         self.seed = seed

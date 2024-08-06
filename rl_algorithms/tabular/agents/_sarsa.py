@@ -7,8 +7,8 @@ from tqdm import tqdm
 
 
 class Sarsa(Agent):
-    def __init__(self, env, learning_rate, gamma, initial_qtable=None):
-        super(Sarsa, self).__init__(env=env, learning_rate=learning_rate, gamma=gamma, initial_qtable=initial_qtable)
+    def __init__(self, env, learning_rate, gamma, learning_rate_dacay=0.0, initial_qtable=None):
+        super(Sarsa, self).__init__(env=env, learning_rate=learning_rate, gamma=gamma, learning_rate_dacay=learning_rate_dacay, initial_qtable=initial_qtable)
 
     def update(self, state, action, reward, new_state, new_action):
         """Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * Q(s',a') - Q(s,a)]"""

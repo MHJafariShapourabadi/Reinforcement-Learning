@@ -6,21 +6,15 @@ from tqdm import tqdm
 
 
 
-class ExpectedSarsa(Agent):
+class QLearning(Agent):
     def __init__(self, env, learning_rate, gamma, learning_rate_dacay=0.0, initial_qtable=None):
-        super(ExpectedSarsa, self).__init__(env=env, learning_rate=learning_rate, gamma=gamma, learning_rate_dacay=learning_rate_dacay, initial_qtable=initial_qtable)
+        super(QLearning, self).__init__(env=env, learning_rate=learning_rate, gamma=gamma, learning_rate_dacay=learning_rate_dacay, initial_qtable=initial_qtable)
 
-
-    def update(self, state, action, reward, new_state, epsilon):
-        """Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * ∑ π(a'|s') Q(s',a') - Q(s,a)]"""
-        # policy_probs = np.zeros(self.action_size)
-        action_size = int(np.sum(self.mask[new_state, :]).item())
-        policy_probs = np.zeros(action_size)
-        policy_probs.fill(epsilon / action_size)
-        policy_probs[np.argmax(self.qtable[new_state, self.mask[new_state, :].astype("bool")])] = 1 - epsilon + (epsilon / action_size)
+    def update(self, state, action, new_state, reward):
+        """Update Q(s,a):= Q(s,a) + lr [R(s,a) + gamma * max Q(s',a') - Q(s,a)]"""
         delta = (
             reward
-            + self.gamma * np.dot(policy_probs, self.qtable[new_state, self.mask[new_state, :].astype("bool")])
+            + self.gamma * np.max(self.qtable[new_state, self.mask[new_state, :].astype("bool")])
             - self.qtable[state, action]
         )
         q_update = self.qtable[state, action] + self.learning_rate * delta
@@ -35,7 +29,7 @@ class ExpectedSarsa(Agent):
         qtables = np.zeros((n_runs, self.state_size, self.action_size))
         all_states = []
         all_actions = []
-
+        
         for run in range(n_runs):  # Run several times to account for stochasticity
             self.reset_qtable(self.initial_qtable)  # Reset the Q-table between runs
             self.reset_policy()
@@ -68,7 +62,7 @@ class ExpectedSarsa(Agent):
                     done = terminated or truncated
 
                     self.update(
-                        state, action, reward, new_state, explorer.epsilon
+                        state, action, new_state, reward
                     )
 
                     total_rewards += reward
@@ -84,5 +78,5 @@ class ExpectedSarsa(Agent):
             qtables[run, :, :] = self.qtable
 
             self.update_policy(seed=seed)
-        
+
         return rewards, steps, episodes, qtables, all_states, all_actions
