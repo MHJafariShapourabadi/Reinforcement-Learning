@@ -1,7 +1,7 @@
 from rl_algorithms.tabular.exploration import Greedy, EpsilonGreedy, SoftMax
 from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, QPlanning, MonteCarloOnPolicy, \
     Sarsa, ExpectedSarsa, QLearning, DoubleQLearning, NStepSarsa, NStepExpectedSarsa, NStepTreeBackup, \
-    DynaQ
+    DynaQ, DynaQPlus
 
 from environments.frozen_lake.utils import *
 
@@ -98,7 +98,8 @@ agents = [
     # NStepSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
     # NStepExpectedSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
     # NStepTreeBackup(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
-    DynaQ(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30),
+    # DynaQ(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30),
+    DynaQPlus(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30, reward_kappa=1e-1),
 ]
 
 explorer = EpsilonGreedy(

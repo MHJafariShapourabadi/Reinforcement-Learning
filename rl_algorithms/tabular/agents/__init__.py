@@ -11,8 +11,8 @@ from ._double_q_learning import DoubleQLearning
 from ._n_step_sarsa import NStepSarsa
 from ._n_step_expected_sarsa import NStepExpectedSarsa
 from ._n_step_tree_backup import NStepTreeBackup
-from ._dyna_q import DynaQ
+from ._dyna_q import DynaQ, DynaQPlus
 
 __all__ = ["Agent", "PolicyIteration", "ValueIteration", "RTDP", "MonteCarloOnPolicy", "QPlanning", "Sarsa",
 "ExpectedSarsa", "QLearning", "DoubleQLearning", "NStepSarsa", "NStepExpectedSarsa", "NStepTreeBackup",
-"DynaQ",]
+"DynaQ", "DynaQPlus"]
