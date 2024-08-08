@@ -1,2 +1,3 @@
 from . import tabular
-__all__ = ["tabular"]
+from . import utils
+__all__ = ["tabular", "utils"]
