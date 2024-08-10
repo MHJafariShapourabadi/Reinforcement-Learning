@@ -1,2 +1,2 @@
 # Reinforcement Learning Algorithms
-Implementation of  Reinforcement Learning algorithms with Python and PyTorch
+A Python package including implementation of various Reinforcement Learning algorithms.
