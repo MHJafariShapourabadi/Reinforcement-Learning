@@ -1,2 +1,2 @@
 # Reinforcement Learning Algorithms
-A Python package including implementation of various Reinforcement Learning algorithms.
+A Python package including the implementation of various Reinforcement Learning algorithms.
