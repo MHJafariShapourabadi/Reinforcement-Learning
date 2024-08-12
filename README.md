@@ -7,6 +7,7 @@ You can find different exploration algorithms under the "rl-algorithms.tabular.e
 1. Greedy
 2. Epsilon Greedy
 3. Softmax
+
 Also, you can find various RL algorithms under the "rl-algorithms.tabular.agents" subpackage, including:
 1. Policy Iteration
 2. Value Iteration
