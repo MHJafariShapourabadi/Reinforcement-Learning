@@ -4,6 +4,7 @@ from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, 
     DynaQ, DynaQPlus, PrioritizedSweeping
 
 from environments.frozen_lake.utils import *
+from environments.frozen_lake.wrappers import FrozenLakeWrapper
 
 from pathlib import Path
 from typing import NamedTuple
@@ -23,6 +24,7 @@ sns.set_theme()
 
 
 class Params(NamedTuple):
+    max_episode_steps: int # Maximum episode steps
     total_episodes: int  # Total episodes
     learning_rate: float  # Learning rate
     learning_rate_decay: float # Learning rate decay
@@ -40,7 +42,8 @@ class Params(NamedTuple):
 
 
 params = Params(
-    total_episodes=2000,
+    max_episode_steps = 300,
+    total_episodes=400,
     learning_rate=0.5,
     learning_rate_decay=0.0,
     gamma=0.95,
@@ -70,6 +73,7 @@ env = gym.make(
     desc=generate_random_map(
         size=params.map_size, p=params.proba_frozen, seed=params.seed
     ),
+    max_episode_steps= params.max_episode_steps,
 )
 
 env.action_space.seed(
@@ -82,6 +86,10 @@ params = params._replace(state_size=env.observation_space.n)
 print(f"Action size: {params.action_size}")
 print(f"State size: {params.state_size}")
 
+env = FrozenLakeWrapper(env)
+
+# print(env.get_wrapper_attr('spec'))
+
 res_all = pd.DataFrame()
 st_all = pd.DataFrame()
 
@@ -93,14 +101,14 @@ agents = [
     # MonteCarloOnPolicy(env, learning_rate=params.learning_rate, gamma=params.gamma, first_vist=False),
     # Sarsa(env, learning_rate=params.learning_rate, gamma=params.gamma),
     # ExpectedSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma),
-    # QLearning(env, learning_rate=params.learning_rate, gamma=params.gamma),
+    QLearning(env, learning_rate=params.learning_rate, gamma=params.gamma),
     # DoubleQLearning(env, learning_rate=params.learning_rate, gamma=params.gamma),
     # NStepSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
     # NStepExpectedSarsa(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
     # NStepTreeBackup(env, learning_rate=params.learning_rate, gamma=params.gamma, n_step=1),
     # DynaQ(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30),
     # DynaQPlus(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30, reward_kappa=1e-1),
-    PrioritizedSweeping(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30, priority_threshold=1e-8, expected_update=True),
+    # PrioritizedSweeping(env, learning_rate=params.learning_rate, gamma=params.gamma, n_planning=30, priority_threshold=1e-8, expected_update=True),
 ]
 
 explorer = EpsilonGreedy(
@@ -148,3 +156,36 @@ for agent in agents:
 env.close()
 
 plot_steps_and_rewards(res_all, st_all, params.savefig_folder)
+
+
+############################################################
+n_episodes = 4
+
+env = gym.make(
+    "FrozenLake-v1",
+    is_slippery=params.is_slippery,
+    render_mode="human",
+    desc=generate_random_map(
+        size=params.map_size, p=params.proba_frozen, seed=params.seed
+    ),
+    max_episode_steps= params.max_episode_steps,
+)
+
+env.action_space.seed(
+        params.seed
+    )  # Set the seed to get reproducible results when sampling the action space
+
+env = FrozenLakeWrapper(env)
+
+explorer = Greedy(seed=params.seed)
+
+for episode in range(n_episodes):
+    state, info = env.reset()
+    done = False
+
+    while not done:
+        action = explorer.choose_action(env.action_space, state, agent.qtable)
+        state, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+
+env.close()
