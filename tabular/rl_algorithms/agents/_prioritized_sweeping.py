@@ -1,4 +1,4 @@
-from ...utils import MaxPriorityQueue
+from ..utils import MaxPriorityQueue
 from . import QLearning
 
 import numpy as np

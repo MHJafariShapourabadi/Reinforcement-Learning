@@ -1,14 +1,27 @@
 import numpy as np
 
 import gymnasium as gym
+from gymnasium import ObservationWrapper, Wrapper
+from gymnasium.spaces import Box, Discrete
 from gymnasium.envs.toy_text.utils import categorical_sample
+
+
+
+
 
 LEFT = 0
 DOWN = 1
 RIGHT = 2
 UP = 3
 
-class FrozenLakeWrapper(gym.Wrapper):
+
+class FrozenLakeWrapper(Wrapper):
+    action_to_dir = {
+        0: 'LEFT',
+        1: 'DOWN',
+        2: 'RIGHT',
+        3: 'UP'
+    }
     def __init__(self, env, step_reward=-1, hole_reward=0, goal_reward=0, episode_auto_restart=True):
         super(FrozenLakeWrapper, self).__init__(env)
         
@@ -19,8 +32,8 @@ class FrozenLakeWrapper(gym.Wrapper):
         # self.desc = desc = self.env.get_wrapper_attr('desc')
         self.nrow, self.ncol = nrow, ncol = desc.shape
 
-        nA = 4
-        nS = nrow * ncol
+        self.n_actions = nA = 4
+        self.n_states = nS = nrow * ncol
 
         self.P = {s: {a: [] for a in range(nA)} for s in range(nS)}
 
@@ -60,7 +73,7 @@ class FrozenLakeWrapper(gym.Wrapper):
         for row in range(nrow):
             for col in range(ncol):
                 s = to_s(row, col)
-                for a in range(4):
+                for a in range(nA):
                     li = self.P[s][a]
                     letter = desc[row, col]
                     if letter in b"GH":
@@ -76,13 +89,27 @@ class FrozenLakeWrapper(gym.Wrapper):
 
     def step(self, a):
         transitions = self.P[self.env.unwrapped.s][a]
-        i = categorical_sample([t[0] for t in transitions], self.np_random)
+        i = categorical_sample([t[0] for t in transitions], self.env.unwrapped.np_random)
         p, s, r, t = transitions[i]
         self.env.unwrapped.s = s
         self.env.unwrapped.lastaction = a
 
-        if self.render_mode == "human":
-            self.render()
-        # truncation=False as the time limit is handled by the `TimeLimit` wrapper added during `make`
-        return int(s), r, t, False, {"prob": p}
+        if self.env.unwrapped.render_mode == "human":
+            self.env.unwrapped.render()
+
+        # TimeLimit handling
+        self.env._elapsed_steps += 1
+
+        if self.env._elapsed_steps >= self.env._max_episode_steps:
+            truncated = True
+        else:
+            truncated = False
+
+        observation, reward, terminated, truncated, info = int(s), r, t, truncated, {"prob": p}
+
+        return observation, reward, terminated, truncated, info
+
+
+
+
 

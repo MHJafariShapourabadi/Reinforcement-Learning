@@ -1,10 +1,10 @@
-from rl_algorithms.tabular.exploration import Greedy, EpsilonGreedy, SoftMax
-from rl_algorithms.tabular.agents import PolicyIteration, ValueIteration, RTDP, QPlanning, MonteCarloOnPolicy, \
+from tabular.rl_algorithms.exploration import Greedy, EpsilonGreedy, SoftMax
+from tabular.rl_algorithms.agents import PolicyIteration, ValueIteration, RTDP, QPlanning, MonteCarloOnPolicy, \
     Sarsa, ExpectedSarsa, QLearning, DoubleQLearning, NStepSarsa, NStepExpectedSarsa, NStepTreeBackup, \
     DynaQ, DynaQPlus, PrioritizedSweeping
 
-from environments.frozen_lake.utils import *
-from environments.frozen_lake.wrappers import FrozenLakeWrapper
+from tabular.environments.frozen_lake.utils import *
+from tabular.environments.frozen_lake.wrappers import FrozenLakeWrapper
 
 from pathlib import Path
 from typing import NamedTuple
@@ -24,13 +24,16 @@ sns.set_theme()
 
 
 class Params(NamedTuple):
-    max_episode_steps: int # Maximum episode steps
     total_episodes: int  # Total episodes
+    max_episode_steps: int # Maximum episode steps
     learning_rate: float  # Learning rate
     learning_rate_decay: float # Learning rate decay
     gamma: float  # Discounting rate
     epsilon: float  # Exploration probability
     epsilon_decay: float # Exploration probability decay
+    step_reward: float # Reward in each step
+    hole_reward: float # Reward of reaching goal
+    goal_reward: float # Reward of stepping into hole
     map_size: int  # Number of tiles of one side of the squared environment
     seed: int  # Define a seed so that we get reproducible results
     is_slippery: bool  # If true the player will move in intended direction with probability of 1/3 else will move in either perpendicular direction with equal probability of 1/3 in both directions
@@ -42,21 +45,24 @@ class Params(NamedTuple):
 
 
 params = Params(
+    total_episodes = 1000,
     max_episode_steps = 300,
-    total_episodes=400,
-    learning_rate=0.5,
-    learning_rate_decay=0.0,
-    gamma=0.95,
-    epsilon=0.1,
-    epsilon_decay=0.0,
-    map_size=10,
-    seed=123,
-    is_slippery=True,
-    n_runs=1,
-    action_size=None,
-    state_size=None,
-    proba_frozen=0.9,
-    savefig_folder=Path("../../_static/img/"),
+    learning_rate = 0.5,
+    learning_rate_decay = 0.0,
+    gamma = 0.99,
+    epsilon = 0.1,
+    epsilon_decay = 0.0,
+    step_reward = -1,
+    hole_reward = -10,
+    goal_reward = 10,
+    map_size = 8,
+    seed = 7,
+    is_slippery = True,
+    n_runs = 1,
+    action_size = None,
+    state_size = None,
+    proba_frozen = 0.9,
+    savefig_folder = Path("../../_static/img/"),
 )
 
 # Set the seed
@@ -86,7 +92,7 @@ params = params._replace(state_size=env.observation_space.n)
 print(f"Action size: {params.action_size}")
 print(f"State size: {params.state_size}")
 
-env = FrozenLakeWrapper(env)
+env = FrozenLakeWrapper(env, params.step_reward, params.hole_reward, params.goal_reward)
 
 # print(env.get_wrapper_attr('spec'))
 
@@ -159,7 +165,7 @@ plot_steps_and_rewards(res_all, st_all, params.savefig_folder)
 
 
 ############################################################
-n_episodes = 4
+n_episodes = 2
 
 env = gym.make(
     "FrozenLake-v1",
@@ -175,7 +181,7 @@ env.action_space.seed(
         params.seed
     )  # Set the seed to get reproducible results when sampling the action space
 
-env = FrozenLakeWrapper(env)
+env = FrozenLakeWrapper(env, params.step_reward, params.hole_reward, params.goal_reward)
 
 explorer = Greedy(seed=params.seed)
 
