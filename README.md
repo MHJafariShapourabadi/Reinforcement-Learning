@@ -31,4 +31,4 @@ Also, you can find various RL algorithms under the "tabular.rl-algorithms.agents
   4. PER Dueling Double Deep N-Step Sarsa
   5. PER Dueling Double Deep N-Step Tree Backup
 
-You can run and evaluate different algorithms on the FrozenLake environment using the "run.py" module on the root directory.
+You can run and evaluate different algorithms on the FrozenLake environment using the "run_tabular.py" and "run_function_approximation.py" modules on the root directory.
