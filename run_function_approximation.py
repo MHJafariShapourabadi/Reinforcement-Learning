@@ -14,7 +14,7 @@ import torch
 from function_approximation.environments.frozen_lake.wrappers import FrozenLakeVectorObservationWrapper
 from function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
 from function_approximation.rl_algorithms.agents import PERDuelingDoubleDeepNStepTreeBackup, DuelingDoubleDeepQNetwork,\
-    PERDuelingDoubleDeepQNetwork, PERDuelingDoubleDeepSarsa, PERDuelingDoubleDeepNStepSarsa
+    PERDuelingDoubleDeepQNetwork, PERDuelingDoubleDeepSarsa, PERDuelingDoubleDeepNStepSarsa, REINFORCE
 from function_approximation.environments.frozen_lake.utils import run_and_display_env
 from function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -87,15 +87,15 @@ exploration = EpsilonGreedyExploration(
 #     seed=None, verbose=False
 # )
 
-agent = PERDuelingDoubleDeepQNetwork(
-    env=modified_env,
-    exploration=exploration,
-    lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
-    gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.01,
-    alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
-    beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
-    seed=None, verbose=True
-)
+# agent = PERDuelingDoubleDeepQNetwork(
+#     env=modified_env,
+#     exploration=exploration,
+#     lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
+#     gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.01,
+#     alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
+#     beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
+#     seed=None, verbose=True
+# )
 
 # agent = PERDuelingDoubleDeepSarsa(
 #     env=modified_env,
@@ -118,9 +118,16 @@ agent = PERDuelingDoubleDeepQNetwork(
 #     seed=None, verbose=True
 # )
 
+agent = REINFORCE(
+    env=modified_env,
+    lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
+    gamma=0.99,
+    seed=None, verbose=True
+)
+
 # %%
 
-num_episodes = 50
+num_episodes = 500
 agent.verbose = False
 agent.training()
 
@@ -152,7 +159,7 @@ plot_with_seaborn(episode_rewards, episode_steps)
 # %%
 
 agent.verbose = False
-agent.evaluating(seed=None)
+# agent.evaluating(seed=None)
 
 # Set the directory for saving videos
 video_dir = "./videos"
