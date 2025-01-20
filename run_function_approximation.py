@@ -14,7 +14,8 @@ import torch
 from function_approximation.environments.frozen_lake.wrappers import FrozenLakeVectorObservationWrapper
 from function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
 from function_approximation.rl_algorithms.agents import PERDuelingDoubleDeepNStepTreeBackup, DuelingDoubleDeepQNetwork,\
-    PERDuelingDoubleDeepQNetwork, PERDuelingDoubleDeepSarsa, PERDuelingDoubleDeepNStepSarsa, REINFORCE
+    PERDuelingDoubleDeepQNetwork, PERDuelingDoubleDeepSarsa, PERDuelingDoubleDeepNStepSarsa, REINFORCE,\
+    REINFORCEWithBaseline
 from function_approximation.environments.frozen_lake.utils import run_and_display_env
 from function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -37,6 +38,7 @@ env = gym.make(
 
 modified_env = FrozenLakeVectorObservationWrapper(
     env=env,
+    slip_epsilon=0.6,
     step_reward=-1,
     hole_reward=-10,
     goal_reward=10,
@@ -90,7 +92,7 @@ exploration = EpsilonGreedyExploration(
 # agent = PERDuelingDoubleDeepQNetwork(
 #     env=modified_env,
 #     exploration=exploration,
-#     lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
+#     lr_start=0.1, lr_end=0.0005, lr_decay=0.00001, decay="linear",
 #     gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.01,
 #     alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
 #     beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
@@ -118,16 +120,24 @@ exploration = EpsilonGreedyExploration(
 #     seed=None, verbose=True
 # )
 
-agent = REINFORCE(
+# agent = REINFORCE(
+#     env=modified_env,
+#     lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
+#     gamma=0.99,
+#     seed=None, verbose=False
+# )
+
+agent = REINFORCEWithBaseline(
     env=modified_env,
-    lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
+    lr_start=0.05, lr_end=0.0005, lr_decay=0.00001, decay="linear",
+    entropy_coef=0.0000001, Huberbeta=1.0,
     gamma=0.99,
-    seed=None, verbose=True
+    seed=None, verbose=False
 )
 
 # %%
 
-num_episodes = 500
+num_episodes = 250
 agent.verbose = False
 agent.training()
 

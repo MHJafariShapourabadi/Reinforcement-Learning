@@ -22,12 +22,14 @@ class FrozenLakeVectorObservationWrapper(Wrapper):
         2: 'RIGHT',
         3: 'UP'
     }
-    def __init__(self, env, step_reward=-1, hole_reward=0, goal_reward=0, episode_auto_restart=True,
+    def __init__(self, env, slip_epsilon=0.3, step_reward=-1, hole_reward=0, goal_reward=0, episode_auto_restart=True,
                  active_neighbour=2, seed=None):
         super(FrozenLakeVectorObservationWrapper, self).__init__(env)
 
-        is_slippery = self.env.unwrapped.spec.kwargs["is_slippery"]
+        self.is_slippery = is_slippery = self.env.unwrapped.spec.kwargs["is_slippery"]
         # s_slippery = self.env.get_wrapper_attr('spec').kwargs["is_slippery"]
+
+        self.slip_epsilon = slip_epsilon
 
         self.desc = desc = self.env.unwrapped.desc
         # self.desc = desc = self.env.get_wrapper_attr('desc')
@@ -98,9 +100,13 @@ class FrozenLakeVectorObservationWrapper(Wrapper):
                         li.append((1.0, s, 0, True))
                     else:
                         if is_slippery:
-                            for b in [(a - 1) % 4, a, (a + 1) % 4]:
+                            for action in [(a - 1) % 4, a, (a + 1) % 4]:
+                                if action == a:
+                                    prob = 1 - self.slip_epsilon + (self.slip_epsilon / 3.0)
+                                else:
+                                    prob = self.slip_epsilon / 3.0
                                 li.append(
-                                    (1.0 / 3.0, *update_probability_matrix(row, col, b))
+                                    (prob, *update_probability_matrix(row, col, action))
                                 )
                         else:
                             li.append((1.0, *update_probability_matrix(row, col, a)))
