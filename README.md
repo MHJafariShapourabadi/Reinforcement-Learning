@@ -25,10 +25,14 @@ Also, you can find various RL algorithms under the "tabular.rl-algorithms.agents
   13. Dyna-Q+
   14. Prioritized Sweeping
 - Function approximation methods:
-  1. Dueling Double DQN
-  2. PER Dueling Double DQN
-  3. PER Dueling Double Deep Sarsa
-  4. PER Dueling Double Deep N-Step Sarsa
-  5. PER Dueling Double Deep N-Step Tree Backup
+  - Value-based:
+    1. Dueling Double DQN
+    2. PER Dueling Double DQN
+    3. PER Dueling Double Deep Sarsa
+    4. PER Dueling Double Deep N-Step Sarsa
+    5. PER Dueling Double Deep N-Step Tree Backup
+  - Policy-based:
+    1. REINFORCE
+    2. REINFORCE with baseline / Vanilla Policy Gradient (VPG)
 
 You can run and evaluate different algorithms on the FrozenLake environment using the "run_tabular.py" and "run_function_approximation.py" modules on the root directory.
