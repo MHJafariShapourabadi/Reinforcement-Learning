@@ -87,7 +87,8 @@ class ValueNetwork(nn.Module):
 
 class REINFORCEWithBaseline:
     def __init__(self, env,
-    lr_start=1e-3, lr_end=1e-5, lr_decay=0.001, decay="linear",
+    policy_lr_start=1e-3, policy_lr_end=1e-5, policy_lr_decay=0.001, policy_decay="linear",
+    value_lr_start=1e-3, value_lr_end=1e-5, value_lr_decay=0.001, value_decay="linear",
     entropy_coef=0.01, Huberbeta=1.0,
     gamma=0.99, seed=None, verbose=False):
         self.env = env
@@ -95,15 +96,23 @@ class REINFORCEWithBaseline:
         self.num_actions = env.action_space.n
         self.num_states = env.observation_space.n
 
-        # Validate the decay type
-        if decay not in {"linear", "exponential", "reciprocal"}:
+        # Validate the policy decay type
+        if policy_decay not in {"linear", "exponential", "reciprocal"}:
             raise ValueError("Invalid value for decay. Must be 'linear', 'exponential' or 'reciprocal'.")
 
-        self.lr = lr_start / env.n_active_features
-        self.lr_start = lr_start / env.n_active_features
-        self.lr_end = lr_end / env.n_active_features
-        self.lr_decay = lr_decay 
-        self.decay = decay
+        self.policy_lr_start = policy_lr_start / env.n_active_features
+        self.policy_lr_end = policy_lr_end / env.n_active_features
+        self.policy_lr_decay = policy_lr_decay 
+        self.policy_decay = policy_decay
+
+        # Validate the value decay type
+        if value_decay not in {"linear", "exponential", "reciprocal"}:
+            raise ValueError("Invalid value for decay. Must be 'linear', 'exponential' or 'reciprocal'.")
+
+        self.value_lr_start = value_lr_start / env.n_active_features
+        self.value_lr_end = value_lr_end / env.n_active_features
+        self.value_lr_decay = value_lr_decay 
+        self.value_decay = value_decay
 
         self.entropy_coef = entropy_coef
         self.Huberbeta = Huberbeta
@@ -123,13 +132,13 @@ class REINFORCEWithBaseline:
         
         # Optimizer for policy network
         # self.policy_optimizer = optim.Adam(self.policy_net.parameters(), lr=self.lr_start)
-        self.policy_optimizer = optim.AdamW(self.policy_net.parameters(), lr=self.lr_start, amsgrad=True)
-        self.policy_scheduler = optim.lr_scheduler.LambdaLR(self.policy_optimizer, lr_lambda=self.update_learning_rate)
+        self.policy_optimizer = optim.AdamW(self.policy_net.parameters(), lr=self.policy_lr_start, amsgrad=True)
+        self.policy_scheduler = optim.lr_scheduler.LambdaLR(self.policy_optimizer, lr_lambda=self.update_policy_learning_rate)
 
         # Optimizer for value network
         # self.value_optimizer = optim.Adam(self.value_net.parameters(), lr=self.lr_start)
-        self.value_optimizer = optim.AdamW(self.value_net.parameters(), lr=self.lr_start, amsgrad=True)
-        self.value_scheduler = optim.lr_scheduler.LambdaLR(self.value_optimizer, lr_lambda=self.update_learning_rate)
+        self.value_optimizer = optim.AdamW(self.value_net.parameters(), lr=self.value_lr_start, amsgrad=True)
+        self.value_scheduler = optim.lr_scheduler.LambdaLR(self.value_optimizer, lr_lambda=self.update_value_learning_rate)
         self.value_criterion = nn.SmoothL1Loss(beta=Huberbeta)
 
         self.steps = 0
@@ -224,19 +233,22 @@ class REINFORCEWithBaseline:
         return values
 
     def update_policy(self, log_probs, entropies, returns, values):
+        T = len(returns)
+
+        discounts = torch.logspace(start=0, end=T - 1, steps=T, base=self.gamma, dtype=torch.float32, device=self.device)
+        
         # Compute advantages
         advantages = returns - values.detach()  # Detach values to prevent backprop through value network
 
+        log_probs = torch.stack(log_probs)
+
         # Policy loss
-        policy_losses = []
-        for log_prob, advantage in zip(log_probs, advantages):
-            policy_losses.append(-log_prob * advantage)
-        policy_loss = torch.stack(policy_losses).sum()
+        policy_loss = -(discounts * advantages * log_probs).sum()
 
         # Entropy loss
         entropy_loss = torch.stack(entropies).mean()
 
-        print(f"entropy loss: {entropy_loss}")
+        print(f"entropy loss: {entropy_loss: .4f}")
 
         # Combine policy loss and entropy loss
         total_policy_loss = policy_loss - self.entropy_coef * entropy_loss
@@ -301,11 +313,11 @@ class REINFORCEWithBaseline:
 
             episode_rewards.append(episode_reward)
             episode_steps.append(steps_in_episode)
-            print(f"Episode {episode + 1}, Reward: {episode_reward}, Steps: {steps_in_episode}")
+            print(f"Episode {episode + 1}, Reward: {episode_reward}, Steps: {steps_in_episode}, Policy lr: {self.policy_scheduler.get_last_lr()[0] : .5f}, Value lr: {self.value_scheduler.get_last_lr()[0] : .5f}")
 
         return episode_rewards, episode_steps
 
-    def update_learning_rate(self, step):
+    def update_policy_learning_rate(self, step):
         """
         Updates the learning rate value using the specified decay type.
 
@@ -317,23 +329,55 @@ class REINFORCEWithBaseline:
             - Exponential Decay: Epsilon decreases exponentially with each step.
             - Reciprocal Decay: Epsilon decreases inversely with each step.
         """
-        if self.decay == "linear":
+        if self.policy_decay == "linear":
             # Linearly decay epsilon, ensuring it does not drop below epsilon_end
             self.lr = max(
-                self.lr_end,
-                self.lr_start - self.lr_decay * step 
+                self.policy_lr_end,
+                self.policy_lr_start - self.policy_lr_decay * step 
             )
-        elif self.decay == "exponential":
+        elif self.policy_decay == "exponential":
             # Exponentially decay epsilon, ensuring it does not drop below epsilon_end
             self.lr = max(
-                self.lr_end,
-                self.lr_start * np.exp(-self.lr_decay * step)
+                self.policy_lr_end,
+                self.policy_lr_start * np.exp(-self.policy_lr_decay * step)
             )
-        elif self.decay == "reciprocal":
+        elif self.policy_decay == "reciprocal":
             # Inversely decay epsilon, ensuring it does not drop below epsilon_end
             self.lr = max(
-                self.lr_end,
-                self.lr_start / (1 + self.lr_decay * step)
+                self.policy_lr_end,
+                self.policy_lr_start / (1 + self.policy_lr_decay * step)
             )
-        return self.lr / self.lr_start
+        return self.lr / self.policy_lr_start
+
+    def update_value_learning_rate(self, step):
+        """
+        Updates the learning rate value using the specified decay type.
+
+        Args:
+            steps (int): Current step count.
+
+        Behavior:
+            - Linear Decay: Epsilon decreases linearly with each step.
+            - Exponential Decay: Epsilon decreases exponentially with each step.
+            - Reciprocal Decay: Epsilon decreases inversely with each step.
+        """
+        if self.value_decay == "linear":
+            # Linearly decay epsilon, ensuring it does not drop below epsilon_end
+            self.lr = max(
+                self.value_lr_end,
+                self.value_lr_start - self.value_lr_decay * step 
+            )
+        elif self.value_decay == "exponential":
+            # Exponentially decay epsilon, ensuring it does not drop below epsilon_end
+            self.lr = max(
+                self.value_lr_end,
+                self.value_lr_start * np.exp(-self.value_lr_decay * step)
+            )
+        elif self.value_decay == "reciprocal":
+            # Inversely decay epsilon, ensuring it does not drop below epsilon_end
+            self.lr = max(
+                self.value_lr_end,
+                self.value_lr_start / (1 + self.value_lr_decay * step)
+            )
+        return self.lr / self.value_lr_start
 

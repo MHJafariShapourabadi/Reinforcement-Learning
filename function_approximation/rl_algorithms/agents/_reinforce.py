@@ -44,7 +44,6 @@ class REINFORCE:
         if decay not in {"linear", "exponential", "reciprocal"}:
             raise ValueError("Invalid value for decay. Must be 'linear', 'exponential' or 'reciprocal'.")
 
-        self.lr = lr_start / env.n_active_features
         self.lr_start = lr_start / env.n_active_features
         self.lr_end = lr_end / env.n_active_features
         self.lr_decay = lr_decay 
@@ -148,10 +147,14 @@ class REINFORCE:
         return returns
 
     def update_policy(self, log_probs, returns):
-        policy_losses = []
-        for log_prob, G in zip(log_probs, returns):
-            policy_losses.append(-log_prob * G)
-        policy_loss = torch.stack(policy_losses).sum()
+        T = len(returns)
+
+        discounts = torch.logspace(start=0, end=T - 1, steps=T, base=self.gamma, dtype=torch.float32, device=self.device)
+
+        log_probs = torch.stack(log_probs)
+
+        # Policy loss
+        policy_loss = -(discounts * returns * log_probs).sum()
 
         self.optimizer.zero_grad()
         policy_loss.backward()
@@ -193,7 +196,7 @@ class REINFORCE:
 
             episode_rewards.append(episode_reward)
             episode_steps.append(steps_in_episode)
-            print(f"Episode {episode + 1}, Reward: {episode_reward}, Steps: {steps_in_episode}")
+            print(f"Episode {episode + 1}, Reward: {episode_reward}, Steps: {steps_in_episode}, Learning rate: {self.scheduler.get_last_lr()[0] : .4f}")
 
         return episode_rewards, episode_steps
 

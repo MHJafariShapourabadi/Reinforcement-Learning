@@ -122,14 +122,15 @@ exploration = EpsilonGreedyExploration(
 
 # agent = REINFORCE(
 #     env=modified_env,
-#     lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
+#     lr_start=0.1, lr_end=0.01, lr_decay=0.005, decay="exponential",
 #     gamma=0.99,
 #     seed=None, verbose=False
 # )
 
 agent = REINFORCEWithBaseline(
     env=modified_env,
-    lr_start=0.05, lr_end=0.0005, lr_decay=0.00001, decay="linear",
+    policy_lr_start=1e-1, policy_lr_end=1e-2, policy_lr_decay=0.005, policy_decay="exponential",
+    value_lr_start=1e-1, value_lr_end=1e-2, value_lr_decay=0.005, value_decay="exponential",
     entropy_coef=0.0000001, Huberbeta=1.0,
     gamma=0.99,
     seed=None, verbose=False
