@@ -117,9 +117,11 @@ class REINFORCEWithBaseline:
         self.entropy_coef = entropy_coef
         self.Huberbeta = Huberbeta
         self.gamma = gamma
+
         self.seed = seed if seed is not None else int(time.time())
         torch.manual_seed(seed=self.seed)
         self.rng = np.random.default_rng(seed=self.seed)
+
         self.verbose = verbose
         self._is_training = True
 
@@ -270,14 +272,14 @@ class REINFORCEWithBaseline:
         self.value_optimizer.step()
         self.value_scheduler.step()
 
-    def train(self, num_episodes):
+    def train(self, max_episodes):
         self.policy_net.train()
         self.value_net.train()
         episode_rewards = []
         episode_steps = []
         self.steps = 0
 
-        for episode in range(num_episodes):
+        for episode in range(max_episodes):
             state, info = self.env.reset()
             done = False
 
