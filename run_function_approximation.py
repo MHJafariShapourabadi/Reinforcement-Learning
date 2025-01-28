@@ -207,7 +207,10 @@ if __name__ == "__main__":
 
     tic = time.time()
 
+    # For other methods except A3C:
     # episode_rewards, episode_steps = agent.train(max_episodes=max_episodes)
+
+    # For A3C:
     episode_rewards, episode_steps = agent.train(max_episodes=max_episodes, num_workers=8)
 
     toc = time.time()
@@ -216,8 +219,14 @@ if __name__ == "__main__":
     # %%
 
     all_states_vectors = torch.tensor(modified_env.state_to_vector, dtype=torch.float32, device=agent.device)
+
+    # For other methods except Actor-Critic and A3C:
     # qtable = agent.policy_net(all_states_vectors).detach().cpu().numpy()
+
+    # For other Actor-Critic methods:
     # qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
+
+    # For A3C:
     qtable = agent.global_actor(all_states_vectors).detach().cpu().numpy()
 
     plot_q_values_map(
