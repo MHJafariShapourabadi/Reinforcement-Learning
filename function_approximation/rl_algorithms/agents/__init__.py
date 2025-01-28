@@ -8,7 +8,8 @@ from ._reinforce_with_baseline import REINFORCEWithBaseline
 from ._actor_critic import ActorCritic
 from ._n_step_actor_critic import NStepActorCritic
 from ._a3c import A3C
+from ._n_step_a3c import NStepA3C
 
 __all__ = ["PERDuelingDoubleDeepNStepTreeBackup", "DuelingDoubleDeepQNetwork", "PERDuelingDoubleDeepQNetwork",
  "PERDuelingDoubleDeepSarsa", "PERDuelingDoubleDeepNStepSarsa", "REINFORCE", "REINFORCEWithBaseline", "ActorCritic",
- "NStepActorCritic", "A3C"]
+ "NStepActorCritic", "A3C", "NStepA3C"]

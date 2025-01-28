@@ -218,14 +218,14 @@ class NStepActorCritic:
             n_entropies = deque(maxlen=self.n_step)
             n_rewards = deque(maxlen=self.n_step)
             n_discounts = deque(maxlen=self.n_step)
+
+            t = 0
+            T = float('inf')
         
             state, info = self.env.reset()
             done = False
 
             I = torch.tensor(1.0).to(self.device)
-
-            t = 0
-            T = float('inf')
 
             episode_reward = 0
             steps_in_episode = 0
