@@ -5,6 +5,8 @@ import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import numpy as np
 import time
+from collections import deque
+from itertools import count
 import gc
 
 
@@ -86,9 +88,9 @@ class Critic(nn.Module):
 
 
 
-class ActorCritic:
+class NStepActorCritic:
     def __init__(self, env_class,
-    input_dim, action_dim,
+    input_dim, action_dim, n_step,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     entropy_coef=0.01, Huberbeta=1.0,
@@ -100,6 +102,7 @@ class ActorCritic:
         self.num_states = self.env.observation_space.n
         self.input_dim = input_dim
         self.action_dim = action_dim
+        self.n_step = n_step
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -210,57 +213,89 @@ class ActorCritic:
         self.steps = 0
 
         for episode in range(max_episodes):
+            n_values = deque(maxlen=self.n_step)
+            n_log_probs = deque(maxlen=self.n_step)
+            n_entropies = deque(maxlen=self.n_step)
+            n_rewards = deque(maxlen=self.n_step)
+            n_discounts = deque(maxlen=self.n_step)
+        
             state, info = self.env.reset()
             done = False
 
             I = torch.tensor(1.0).to(self.device)
 
+            t = 0
+            T = float('inf')
+
             episode_reward = 0
             steps_in_episode = 0
 
-            while True:
-                observation = info['observation']
-                observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
-                action_logits = self.actor(observation)
-                state_value = self.critic(observation)
-                action_dist = torch.distributions.Categorical(logits=action_logits)
-                action = action_dist.sample()
-                log_prob = action_dist.log_prob(action)
-                entropy = action_dist.entropy()
+            for t in count():
+                if t < T:
+                    observation = info['observation']
+                    observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    action_logits = self.actor(observation)
+                    state_value = self.critic(observation)
+                    action_dist = torch.distributions.Categorical(logits=action_logits)
+                    action = action_dist.sample()
+                    log_prob = action_dist.log_prob(action)
+                    entropy = action_dist.entropy()
 
-                next_state, reward, terminated, truncated, next_info = self.env.step(action.item())
-                done = terminated or truncated
+                    next_state, reward, terminated, truncated, next_info = self.env.step(action.item())
+                    done = terminated or truncated
 
-                next_observation = next_info['observation']
-                next_observation = torch.tensor(next_observation, dtype=torch.float32).unsqueeze(0).to(self.device)
-                with torch.no_grad():
-                    next_state_value = self.critic(next_observation).detach()
+                    if done:
+                      T = t + 1
+
+                    next_observation = next_info['observation']
+                    next_observation = torch.tensor(next_observation, dtype=torch.float32).unsqueeze(0).to(self.device)
+
+                    with torch.no_grad():
+                        if terminated:
+                            next_state_value = torch.zeros(1, dtype=torch.float32).to(self.device)
+                        else:
+                            next_state_value = self.critic(next_observation).detach()
+
+                    n_values.append(state_value)
+                    n_log_probs.append(log_prob)
+                    n_entropies.append(entropy)
+                    n_rewards.append(reward)
+                    n_discounts.append(I)
+
+                    I *= self.gamma
+                    state = next_state
+                    info = next_info
+
+                    episode_reward += reward
+                    self.steps += 1
+                    steps_in_episode += 1
                 
-                target = reward + self.gamma * next_state_value
-                critic_loss = self.critic_criterion(state_value, target)
+                tau = t + 1 - self.n_step
+                if tau >= 0:
+                    target = next_state_value
+                    for r in reversed(n_rewards):
+                        target = self.gamma * target + r
 
-                self.critic_optimizer.zero_grad()
-                critic_loss.backward()
-                self.critic_optimizer.step()
-                self.critic_scheduler.step()
+                    state_value_ = n_values.popleft()
+                    critic_loss = self.critic_criterion(state_value_, target)
 
-                advantage = target - state_value.detach()
-                actor_loss = -(I * advantage * log_prob) - self.entropy_coef * entropy
+                    self.critic_optimizer.zero_grad()
+                    critic_loss.backward()
+                    self.critic_optimizer.step()
+                    self.critic_scheduler.step()
 
-                self.actor_optimizer.zero_grad()
-                actor_loss.backward()
-                self.actor_optimizer.step()
-                self.actor_scheduler.step()
+                    advantage_ = target - state_value_.detach()
+                    log_prob_ = n_log_probs.popleft()
+                    I_ = n_discounts.popleft()
+                    entropy_ = n_entropies.popleft()
+                    actor_loss = -(I_ * advantage_ * log_prob_) - self.entropy_coef * entropy_
 
-                I *= self.gamma
-                state = next_state
-                info = next_info
+                    self.actor_optimizer.zero_grad()
+                    actor_loss.backward()
+                    self.actor_optimizer.step()
+                    self.actor_scheduler.step()
 
-                episode_reward += reward
-                self.steps += 1
-                steps_in_episode += 1
-
-                if done:
+                if tau == T - 1: 
                     gc.collect()
                     break
 

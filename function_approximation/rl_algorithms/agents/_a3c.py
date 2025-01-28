@@ -7,13 +7,19 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import random
+import gc
 
 
 
 class SahredLambdaLRScheduler(optim.lr_scheduler.LambdaLR):
     def __init__(self, optimizer, lr_lambda, *args, **kwargs):
         super(SahredLambdaLRScheduler, self).__init__(optimizer=optimizer, lr_lambda=lr_lambda, *args, **kwargs)
-        self.last_epoch = torch.tensor(-1).share_memory_()
+        self.last_epoch = torch.tensor(self.last_epoch).share_memory_()
+
+    def _initial_step(self):
+        """Initialize step counts and perform a step."""
+        self._step_count = torch.zeros(1).share_memory_()
+        self.step()
 
 
 class SharedAdam(torch.optim.Adam):
@@ -370,7 +376,9 @@ class A3C:
                 episode_reward += reward
                 steps_in_episode += 1
 
-            if self.get_out_signal: break
+            if self.get_out_signal: 
+                gc.collect()
+                break
 
             with self.get_out_lock:
                 self.episode_rewards[self.episode.item()] = episode_reward
