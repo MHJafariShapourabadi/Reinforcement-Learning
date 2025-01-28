@@ -6,6 +6,8 @@ from ._per_dueling_double_deep_n_step_sarsa import PERDuelingDoubleDeepNStepSars
 from ._reinforce import REINFORCE
 from ._reinforce_with_baseline import REINFORCEWithBaseline
 from ._actor_critic import ActorCritic
+from ._a3c import A3C
 
 __all__ = ["PERDuelingDoubleDeepNStepTreeBackup", "DuelingDoubleDeepQNetwork", "PERDuelingDoubleDeepQNetwork",
- "PERDuelingDoubleDeepSarsa", "PERDuelingDoubleDeepNStepSarsa", "REINFORCE", "REINFORCEWithBaseline", "ActorCritic"]
+ "PERDuelingDoubleDeepSarsa", "PERDuelingDoubleDeepNStepSarsa", "REINFORCE", "REINFORCEWithBaseline", "ActorCritic",
+ "A3C"]

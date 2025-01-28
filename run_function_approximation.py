@@ -15,7 +15,7 @@ from function_approximation.environments.frozen_lake.wrappers import FrozenLakeV
 from function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
 from function_approximation.rl_algorithms.agents import PERDuelingDoubleDeepNStepTreeBackup, DuelingDoubleDeepQNetwork,\
     PERDuelingDoubleDeepQNetwork, PERDuelingDoubleDeepSarsa, PERDuelingDoubleDeepNStepSarsa, REINFORCE,\
-    REINFORCEWithBaseline, ActorCritic
+    REINFORCEWithBaseline, ActorCritic, A3C
 from function_approximation.environments.frozen_lake.utils import run_and_display_env
 from function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -155,23 +155,25 @@ if __name__ == "__main__":
     #     seed=None, verbose=False
     # )
 
-    agent = ActorCritic(
+    # agent = ActorCritic(
+    #     env_class=env_class,
+    #     input_dim=modified_env.observation_shape[0], 
+    #     action_dim=modified_env.action_space.n,
+    #     actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    agent = A3C(
         env_class=env_class,
         input_dim=modified_env.observation_shape[0], 
         action_dim=modified_env.action_space.n,
-        actor_lr_start=1e-1, actor_lr_end=1e-2, actor_lr_decay=0.005, actor_decay="exponential",
-        critic_lr_start=1e-1, critic_lr_end=1e-2, critic_lr_decay=0.005, critic_decay="exponential",
-        gamma=0.99, entropy_coef=0.01, Huberbeta=1.0, 
+        actor_lr_start=1e-3, actor_lr_end=1e-4, actor_lr_decay=0.00005, actor_decay="exponential",
+        critic_lr_start=1e-3, critic_lr_end=1e-4, critic_lr_decay=0.00005, critic_decay="exponential",
+        gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
         seed=None, verbose=False
     )
-
-    # agent = A3C( 
-    #     env_class, 
-    #     input_dim=modified_env.observation_shape[0], 
-    #     action_dim=modified_env.action_space.n, 
-    #     n_step=5, 
-    #     actor_lr=1e-4, critic_lr=1e-3, 
-    #     gamma=0.99, entropy_coef=0.0, Huberbeta=1.0)
 
 
 
@@ -183,8 +185,8 @@ if __name__ == "__main__":
 
     tic = time.time()
 
-    episode_rewards, episode_steps = agent.train(max_episodes=max_episodes)
-    # episode_rewards, episode_steps = agent.train(max_episodes=max_episodes, num_workers=4)
+    # episode_rewards, episode_steps = agent.train(max_episodes=max_episodes)
+    episode_rewards, episode_steps = agent.train(max_episodes=max_episodes, num_workers=8)
 
     toc = time.time()
     elapsed = toc - tic
@@ -193,8 +195,8 @@ if __name__ == "__main__":
 
     all_states_vectors = torch.tensor(modified_env.state_to_vector, dtype=torch.float32, device=agent.device)
     # qtable = agent.policy_net(all_states_vectors).detach().cpu().numpy()
-    qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
-    # qtable = agent.global_actor(all_states_vectors).detach().cpu().numpy()
+    # qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
+    qtable = agent.global_actor(all_states_vectors).detach().cpu().numpy()
 
     plot_q_values_map(
             qtable=qtable, 
