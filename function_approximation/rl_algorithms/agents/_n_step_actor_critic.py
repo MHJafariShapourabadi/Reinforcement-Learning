@@ -5,9 +5,65 @@ import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import numpy as np
 import time
-from collections import deque
+# from collections import deque
 from itertools import count
 import gc
+
+
+
+
+
+
+
+class SpecialDeque:
+    def __init__(self, maxlen):
+        self.maxlen = maxlen
+        self.list = [None] * maxlen
+        self.last_item = None
+        self.start_idx = 0
+        self.end_idx = 0
+        self.size = 0
+        self.full = False
+        self.empty = True
+
+    def append(self, value):
+        self.list[self.end_idx] = value
+        self.size = min(self.size + 1, self.maxlen)
+        self.end_idx = (self.end_idx + 1) % self.maxlen
+        self.empty = False
+        if self.end_idx == self.start_idx:
+            self.full = True
+        if self.full:
+            self.start_idx = self.end_idx
+
+    def append_last(self, value):
+        self.last_item = value
+
+    def popleft(self):
+        if self.empty:
+            raise Exception("Poping empty deque.")
+        value = self.list[self.start_idx]
+        self.size = max(self.size - 1, 0)
+        self.start_idx = (self.start_idx + 1) % self.maxlen
+        self.full = False
+        if self.start_idx == self.end_idx:
+            self.empty = True
+        return value
+
+    def __getitem__(self, index):
+        if index == self.maxlen:
+            return self.last_item
+        else:
+            if index > self.maxlen or index < - self.maxlen:
+                raise IndexError("Index out of deque range.")
+            index = (index + self.start_idx) % self.maxlen
+            return self.list[index]
+
+    def __len__(self):
+        return self.size
+
+    def __repr__(self):
+        return f"{self.list}"
 
 
 
@@ -213,13 +269,12 @@ class NStepActorCritic:
         self.steps = 0
 
         for episode in range(max_episodes):
-            n_values = deque(maxlen=self.n_step)
-            n_log_probs = deque(maxlen=self.n_step)
-            n_entropies = deque(maxlen=self.n_step)
-            n_rewards = deque(maxlen=self.n_step)
-            n_discounts = deque(maxlen=self.n_step)
+            n_values = SpecialDeque(maxlen=self.n_step)
+            n_log_probs = SpecialDeque(maxlen=self.n_step)
+            n_entropies = SpecialDeque(maxlen=self.n_step)
+            n_rewards = SpecialDeque(maxlen=self.n_step)
+            n_discounts = SpecialDeque(maxlen=self.n_step)
 
-            t = 0
             T = float('inf')
         
             state, info = self.env.reset()

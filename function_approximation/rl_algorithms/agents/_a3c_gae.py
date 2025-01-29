@@ -7,7 +7,7 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import random
-# from collections import deque
+from collections import deque
 from itertools import count
 import gc
 
@@ -216,9 +216,9 @@ class Critic(nn.Module):
 
 
 
-class NStepA3C:
+class A3CGAE:
     def __init__(self, env_class,
-    input_dim, action_dim, n_step,
+    input_dim, action_dim, n_step, lambd = 0.9,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     entropy_coef=0.01, Huberbeta=1.0,
@@ -231,6 +231,7 @@ class NStepA3C:
         self.input_dim = input_dim
         self.action_dim = action_dim
         self.n_step = n_step
+        self.lambd = lambd
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -418,6 +419,7 @@ class NStepA3C:
                             next_state_value = local_critic(next_observation).detach()
 
                     n_values.append(state_value)
+                    n_values.append_last(next_state_value)
                     n_log_probs.append(log_prob)
                     n_entropies.append(entropy)
                     n_rewards.append(reward)
@@ -433,12 +435,13 @@ class NStepA3C:
                 
                 tau = t + 1 - self.n_step
                 if tau >= 0:
-                    target = next_state_value
-                    for r in reversed(n_rewards):
-                        target = self.gamma * target + r
-
+                    target = n_values[0].detach().clone()
+                    for i in range(len(n_values)):
+                        td_error = n_rewards[i] + self.gamma * n_values[i + 1].detach() - n_values[i].detach()
+                        target += ((self.gamma * self.lambd) ** i) * td_error
+                    
                     state_value_ = n_values.popleft()
-                    critic_loss = self.critic_criterion(state_value_, target)
+                    critic_loss = self.critic_criterion(state_value_, target.detach())
 
                     local_critic.zero_grad()
                     self.critic_optimizer.zero_grad()
@@ -450,7 +453,7 @@ class NStepA3C:
                     self.critic_scheduler.step()
                     local_critic.load_state_dict(self.global_critic.state_dict())
 
-                    advantage_ = target - state_value_.detach()
+                    advantage_ = target.detach() - state_value_.detach()
                     log_prob_ = n_log_probs.popleft()
                     I_ = n_discounts.popleft()
                     entropy_ = n_entropies.popleft()
