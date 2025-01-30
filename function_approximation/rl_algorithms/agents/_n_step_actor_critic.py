@@ -331,6 +331,7 @@ class NStepActorCritic:
                     for r in reversed(n_rewards):
                         target = self.gamma * target + r
 
+                    n_rewards.popleft()
                     state_value_ = n_values.popleft()
                     critic_loss = self.critic_criterion(state_value_, target)
 

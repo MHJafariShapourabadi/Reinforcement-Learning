@@ -165,16 +165,16 @@ if __name__ == "__main__":
     #     seed=None, verbose=False
     # )
 
-    agent = NStepActorCritic(
-        env_class=env_class,
-        input_dim=modified_env.observation_shape[0], 
-        action_dim=modified_env.action_space.n,
-        n_step=5,
-        actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential",
-        critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-        gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-        seed=None, verbose=False
-    )
+    # agent = NStepActorCritic(
+    #     env_class=env_class,
+    #     input_dim=modified_env.observation_shape[0], 
+    #     action_dim=modified_env.action_space.n,
+    #     n_step=5,
+    #     actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
 
     # agent = ActorCriticGAE(
     #     env_class=env_class,
@@ -208,16 +208,16 @@ if __name__ == "__main__":
     #     seed=None, verbose=False
     # )
 
-    # agent = A3CGAE(
-    #     env_class=env_class,
-    #     input_dim=modified_env.observation_shape[0], 
-    #     action_dim=modified_env.action_space.n,
-    #     n_step=5, lambd = 0.95,
-    #     actor_lr_start=1e-3, actor_lr_end=1e-4, actor_lr_decay=0.00005, actor_decay="exponential",
-    #     critic_lr_start=1e-3, critic_lr_end=1e-4, critic_lr_decay=0.00005, critic_decay="exponential",
-    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-    #     seed=None, verbose=False
-    # )
+    agent = A3CGAE(
+        env_class=env_class,
+        input_dim=modified_env.observation_shape[0], 
+        action_dim=modified_env.action_space.n,
+        n_step=5, lambd = 0.5,
+        actor_lr_start=1e-3, actor_lr_end=1e-4, actor_lr_decay=0.00005, actor_decay="exponential",
+        critic_lr_start=1e-3, critic_lr_end=1e-4, critic_lr_decay=0.00005, critic_decay="exponential",
+        gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+        seed=None, verbose=False
+    )
 
 
 
@@ -230,10 +230,10 @@ if __name__ == "__main__":
     tic = time.time()
 
     # For other methods except A3C:
-    episode_rewards, episode_steps = agent.train(max_episodes=max_episodes)
+    # episode_rewards, episode_steps = agent.train(max_episodes=max_episodes)
 
     # For A3C:
-    # episode_rewards, episode_steps = agent.train(max_episodes=max_episodes, num_workers=8)
+    episode_rewards, episode_steps = agent.train(max_episodes=max_episodes, num_workers=8)
 
     toc = time.time()
     elapsed = toc - tic
@@ -246,10 +246,10 @@ if __name__ == "__main__":
     # qtable = agent.policy_net(all_states_vectors).detach().cpu().numpy()
 
     # For other Actor-Critic methods:
-    qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
+    # qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
 
     # For A3C:
-    # qtable = agent.global_actor(all_states_vectors).detach().cpu().numpy()
+    qtable = agent.global_actor(all_states_vectors).detach().cpu().numpy()
 
     plot_q_values_map(
             qtable=qtable, 

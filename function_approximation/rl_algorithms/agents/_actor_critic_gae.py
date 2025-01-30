@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import numpy as np
 import time
+# from collections import deque
 from itertools import count
 import gc
 
@@ -333,6 +334,7 @@ class ActorCriticGAE:
                         td_error = n_rewards[i] + self.gamma * n_values[i + 1].detach() - n_values[i].detach()
                         target += ((self.gamma * self.lambd) ** i) * td_error
                     
+                    n_rewards.popleft()
                     state_value_ = n_values.popleft()
                     critic_loss = self.critic_criterion(state_value_, target.detach())
 
