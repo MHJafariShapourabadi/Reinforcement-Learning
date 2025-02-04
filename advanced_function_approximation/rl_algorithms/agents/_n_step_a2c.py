@@ -6,6 +6,8 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import gc
+from collections import deque
+from itertools import count
 
 
 
@@ -86,8 +88,8 @@ class Critic(nn.Module):
 
 
 
-class A2C:
-    def __init__(self, env,
+class NStepA2C:
+    def __init__(self, env, n_step,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     entropy_coef=0.01, Huberbeta=1.0,
@@ -95,6 +97,7 @@ class A2C:
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.n
+        self.n_step = n_step
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -203,13 +206,20 @@ class A2C:
         episode_steps = []
         self.steps = 0
 
+        n_values = deque(maxlen=self.n_step)
+        n_log_probs = deque(maxlen=self.n_step)
+        n_entropies = deque(maxlen=self.n_step)
+        n_rewards = deque(maxlen=self.n_step)
+        n_I = deque(maxlen=self.n_step)
+        n_terminateds = deque(maxlen=self.n_step)
+
         episodes = 0
         I, states, infos = self.env.reset()
 
         I = torch.tensor(I, dtype=torch.float32).to(self.device)
         states = torch.tensor(states, dtype=torch.float32).to(self.device)
 
-        while True:
+        for t in count():
             actions_logits = self.actor(states)
             states_value = self.critic(states)
             actions_dist = torch.distributions.Categorical(logits=actions_logits)
@@ -218,8 +228,6 @@ class A2C:
             entropies = actions_dist.entropy()
 
             next_I, next_states, rewards, terminateds, truncateds, next_infos = self.env.step(actions.cpu().numpy())
-            # dones = np.logical_or(terminateds, truncateds)
-            # episodes += np.sum(dones, keepdims=False)
 
             next_I = torch.tensor(next_I, dtype=torch.float32).to(self.device)
             next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
@@ -227,40 +235,41 @@ class A2C:
             terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
-            rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
-            terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
-            
-            targets = rewards + self.gamma * next_states_value * (1.0 - terminateds)
-            # print("=================================")
-            # print(f"states: {states.shape}")
-            # print(f"next states: {next_states.shape}")
-            # print(f"actions_logits: {actions_logits.shape}")
-            # print(f"rewards: {rewards.shape}")
-            # print(f"states value: {states_value.shape}")
-            # print(f"next states value: {next_states_value.shape}")
-            # print(f"terminateds: {terminateds.shape}")
-            # print(f"targets: {targets.shape}")
-            critic_loss = self.critic_criterion(states_value, targets)
-            self.critic_optimizer.zero_grad()
-            critic_loss.backward()
-            self.critic_optimizer.step()
-            self.critic_scheduler.step()
-
-            advantages = targets - states_value.detach()
-            # print(f"log_probs: {log_probs.shape}")
-            # print(f"entropies: {entropies.shape}")
-            # print(f"advantages: {advantages.shape}")
-            # print(f"I: {I.shape}")
-            actor_loss = (-(torch.pow(self.gamma, I) * advantages * log_probs) - self.entropy_coef * entropies).mean()
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor_optimizer.step()
-            self.actor_scheduler.step()
 
             I = next_I
             states = next_states
             infos = next_infos
             self.steps += 1
+
+            n_values.append(states_value)
+            n_log_probs.append(log_probs)
+            n_entropies.append(entropies)
+            n_rewards.append(rewards)
+            n_I.append(I)
+            n_terminateds.append(terminateds)
+
+            
+            if t >= self.n_step - 1:
+                targets = next_states_value
+                for i in reversed(range(self.n_step)):
+                    targets = n_rewards[i] + self.gamma * targets * (1.0 - n_terminateds[i])
+                
+                states_value = n_values[0]
+                critic_loss = self.critic_criterion(states_value, targets)
+                self.critic_optimizer.zero_grad()
+                critic_loss.backward()
+                self.critic_optimizer.step()
+                self.critic_scheduler.step()
+
+                log_probs = n_log_probs[0]
+                I = n_I[0]
+                entropies = n_entropies[0]
+                advantages = targets - states_value.detach()
+                actor_loss = (-(torch.pow(self.gamma, I) * advantages * log_probs) - self.entropy_coef * entropies).mean()
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                self.actor_optimizer.step()
+                self.actor_scheduler.step()
 
             for worker_id in range(len(infos)):
                 info = infos[worker_id]

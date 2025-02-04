@@ -21,7 +21,8 @@ from advanced_function_approximation.environments.frozen_lake.wrappers import Fr
 from advanced_function_approximation.environments.frozen_lake.custom_frozen_lake import FrozenLakeVectorObsevationEnvClass, FrozenLakeImageFrameObsevationEnvClass, FrozenLakeArrayFrameObsevationEnvClass
 
 from advanced_function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
-from advanced_function_approximation.rl_algorithms.agents import A2C, ActorCritic, NStepActorCritic, ActorCriticGAE
+from advanced_function_approximation.rl_algorithms.agents import A2C, NStepA2C, \
+ActorCritic, NStepActorCritic, ActorCriticGAE
 
 from advanced_function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from advanced_function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -124,8 +125,16 @@ if __name__ == "__main__":
 
     # %%
 
-    agent = A2C(
-        env=vector_env,
+    # agent = A2C(
+    #     env=vector_env,
+    #     actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    agent = NStepA2C(
+        env=vector_env, n_step=5,
         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
         gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 

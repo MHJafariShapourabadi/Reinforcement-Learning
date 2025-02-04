@@ -233,11 +233,10 @@ class NStepActorCritic:
 
     @torch.no_grad()
     def select_action(self, state, info):
-        observation = info['observation']
-        observation = torch.tensor(observation, dtype=torch.float32, device=self.device).unsqueeze(0)
+        state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
             self.actor.eval()
-            logits = self.actor(observation).squeeze(0).detach()
+            logits = self.actor(state).squeeze(0).detach()
         if self.is_training:
             dist = Categorical(logits=logits)
             action = dist.sample().item()
@@ -280,6 +279,7 @@ class NStepActorCritic:
             state, info = self.env.reset()
             done = False
 
+            state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
             I = torch.tensor(1.0).to(self.device)
 
             episode_reward = 0
@@ -287,10 +287,8 @@ class NStepActorCritic:
 
             for t in count():
                 if t < T:
-                    observation = info['observation']
-                    observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(self.device)
-                    action_logits = self.actor(observation)
-                    state_value = self.critic(observation)
+                    action_logits = self.actor(state)
+                    state_value = self.critic(state)
                     action_dist = torch.distributions.Categorical(logits=action_logits)
                     action = action_dist.sample()
                     log_prob = action_dist.log_prob(action)
@@ -302,8 +300,7 @@ class NStepActorCritic:
                     if done:
                       T = t + 1
 
-                    next_observation = next_info['observation']
-                    next_observation = torch.tensor(next_observation, dtype=torch.float32).unsqueeze(0).to(self.device)
+                    next_state = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0).to(self.device)
 
                     with torch.no_grad():
                         if terminated:
