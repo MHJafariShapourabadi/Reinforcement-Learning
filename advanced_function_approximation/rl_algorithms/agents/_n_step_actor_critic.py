@@ -306,7 +306,7 @@ class NStepActorCritic:
                         if terminated:
                             next_state_value = torch.zeros(1, dtype=torch.float32).to(self.device)
                         else:
-                            next_state_value = self.critic(next_observation).detach()
+                            next_state_value = self.critic(next_state).detach()
 
                     n_values.append(state_value)
                     n_log_probs.append(log_prob)

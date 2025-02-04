@@ -6,6 +6,65 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import gc
+from collections import deque
+from itertools import count
+
+
+
+
+
+
+
+
+class SpecialDeque:
+    def __init__(self, maxlen):
+        self.maxlen = maxlen
+        self.list = [None] * maxlen
+        self.last_item = None
+        self.start_idx = 0
+        self.end_idx = 0
+        self.size = 0
+        self.full = False
+        self.empty = True
+
+    def append(self, value):
+        self.list[self.end_idx] = value
+        self.size = min(self.size + 1, self.maxlen)
+        self.end_idx = (self.end_idx + 1) % self.maxlen
+        self.empty = False
+        if self.end_idx == self.start_idx:
+            self.full = True
+        if self.full:
+            self.start_idx = self.end_idx
+
+    def append_last(self, value):
+        self.last_item = value
+
+    def popleft(self):
+        if self.empty:
+            raise Exception("Poping empty deque.")
+        value = self.list[self.start_idx]
+        self.size = max(self.size - 1, 0)
+        self.start_idx = (self.start_idx + 1) % self.maxlen
+        self.full = False
+        if self.start_idx == self.end_idx:
+            self.empty = True
+        return value
+
+    def __getitem__(self, index):
+        if index == self.maxlen:
+            return self.last_item
+        else:
+            if index > self.maxlen or index < - self.maxlen:
+                raise IndexError("Index out of deque range.")
+            index = (index + self.start_idx) % self.maxlen
+            return self.list[index]
+
+    def __len__(self):
+        return self.size
+
+    def __repr__(self):
+        return f"{self.list}"
 
 
 
@@ -86,8 +145,8 @@ class Critic(nn.Module):
 
 
 
-class A2C:
-    def __init__(self, env,
+class A2CGAE:
+    def __init__(self, env, n_step, lambd = 0.9,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     entropy_coef=0.01, Huberbeta=1.0,
@@ -95,6 +154,8 @@ class A2C:
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.n
+        self.n_step = n_step
+        self.lambd = lambd
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -203,56 +264,82 @@ class A2C:
         episode_steps = []
         self.steps = 0
 
+        n_values = SpecialDeque(maxlen=self.n_step)
+        n_log_probs = SpecialDeque(maxlen=self.n_step)
+        n_entropies = SpecialDeque(maxlen=self.n_step)
+        n_rewards = SpecialDeque(maxlen=self.n_step)
+        n_I = SpecialDeque(maxlen=self.n_step)
+        n_terminateds = SpecialDeque(maxlen=self.n_step)
+
         episodes = 0
         I, states, infos = self.env.reset()
 
         I = torch.tensor(I, dtype=torch.float32).to(self.device)
         states = torch.tensor(states, dtype=torch.float32).to(self.device)
 
-        valids = torch.ones((states.shape[0], 1), dtype=torch.float32).to(self.device)
-
-        while True:
-
+        for t in count():
             actions_logits = self.actor(states)
             states_value = self.critic(states)
             actions_dist = torch.distributions.Categorical(logits=actions_logits)
             actions = actions_dist.sample()
             log_probs = actions_dist.log_prob(actions)
-            entropys = actions_dist.entropy()
+            entropies = actions_dist.entropy()
 
             next_I, next_states, rewards, terminateds, truncateds, next_infos = self.env.step(actions.cpu().numpy())
-            dones = np.logical_or(terminateds, truncateds)
-            episodes += np.sum(dones, keepdims=False)
 
             next_I = torch.tensor(next_I, dtype=torch.float32).to(self.device)
             next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
+            rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
+            terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
-            rewards = torch.tensor(rewards, dtype=torch.float32).unsqueeze(1).to(self.device)
-            terminateds = torch.tensor(terminateds, dtype=torch.float32).unsqueeze(1).to(self.device)
-            
-            targets = rewards + self.gamma * next_states_value * (1.0 - terminateds)
-            critic_loss = self.critic_criterion(valids * states_value, targets)
-            self.critic_optimizer.zero_grad()
-            critic_loss.backward()
-            self.critic_optimizer.step()
-            self.critic_scheduler.step()
-
-            advantages = targets - states_value.detach()
-            actor_loss = (valids * (-(torch.pow(self.gamma, I) * advantages * log_probs) - self.entropy_coef * entropys)).mean()
-            self.actor_optimizer.zero_grad()
-            actor_loss.backward()
-            self.actor_optimizer.step()
-            self.actor_scheduler.step()
 
             I = next_I
             states = next_states
             infos = next_infos
-            valids = torch.tensor(np.logical_not(dones), dtype=torch.float32).unsqueeze(1).to(self.device)
             self.steps += 1
 
-            for info in infos:
+            n_values.append(states_value)
+            n_values.append_last(next_states_value)
+            n_log_probs.append(log_probs)
+            n_entropies.append(entropies)
+            n_rewards.append(rewards)
+            n_I.append(I)
+            n_terminateds.append(terminateds)
+
+            
+            if t >= self.n_step - 1:
+                targets = 0.0
+                for i in reversed(range(self.n_step)):
+                    td_errors = n_rewards[i] + self.gamma * n_values[i + 1].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
+                    targets = (1.0 - n_terminateds[i]) * targets + ((self.gamma * self.lambd) ** i) * td_errors
+                targets += n_values[0].detach().clone()
+                
+                states_value = n_values[0]
+                critic_loss = self.critic_criterion(states_value, targets.detach())
+                self.critic_optimizer.zero_grad()
+                critic_loss.backward()
+                self.critic_optimizer.step()
+                self.critic_scheduler.step()
+
+                log_probs = n_log_probs[0]
+                I = n_I[0]
+                entropies = n_entropies[0]
+                advantages = targets.detach() - states_value.detach()
+                actor_loss = (-(torch.pow(self.gamma, I) * advantages * log_probs) - self.entropy_coef * entropies).mean()
+                self.actor_optimizer.zero_grad()
+                actor_loss.backward()
+                self.actor_optimizer.step()
+                self.actor_scheduler.step()
+
+            for worker_id in range(len(infos)):
+                info = infos[worker_id]
                 if info['done']:
+                    episodes += 1
+                    I, states, new_info = self.env.reset(worker_id)
+                    I = torch.tensor(I, dtype=torch.float32).to(self.device)
+                    states = torch.tensor(states, dtype=torch.float32).to(self.device)
+                    infos[worker_id] = new_info
                     episode_reward = info['episode_reward']
                     steps_in_episode = info['episode_steps']
                     episode_rewards.append(episode_reward)

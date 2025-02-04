@@ -21,7 +21,7 @@ from advanced_function_approximation.environments.frozen_lake.wrappers import Fr
 from advanced_function_approximation.environments.frozen_lake.custom_frozen_lake import FrozenLakeVectorObsevationEnvClass, FrozenLakeImageFrameObsevationEnvClass, FrozenLakeArrayFrameObsevationEnvClass
 
 from advanced_function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
-from advanced_function_approximation.rl_algorithms.agents import A2C, NStepA2C, \
+from advanced_function_approximation.rl_algorithms.agents import A2C, NStepA2C, A2CGAE, \
 ActorCritic, NStepActorCritic, ActorCriticGAE
 
 from advanced_function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
@@ -133,8 +133,16 @@ if __name__ == "__main__":
     #     seed=None, verbose=False
     # )
 
-    agent = NStepA2C(
-        env=vector_env, n_step=5,
+    # agent = NStepA2C(
+    #     env=vector_env, n_step=5,
+    #     actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    agent = A2CGAE(
+        env=vector_env, n_step=5, lambd=0.6,
         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
         gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
@@ -271,3 +279,18 @@ if __name__ == "__main__":
 # log_prob = dist.log_prob(action)
 # print(log_prob)
 # print(log_prob.dtype)
+
+
+# print("=================================")
+# print(f"states: {states.shape}")
+# print(f"next states: {next_states.shape}")
+# print(f"actions_logits: {actions_logits.shape}")
+# print(f"rewards: {rewards.shape}")
+# print(f"states value: {states_value.shape}")
+# print(f"next states value: {next_states_value.shape}")
+# print(f"terminateds: {terminateds.shape}")
+# print(f"targets: {targets.shape}")
+# print(f"log_probs: {log_probs.shape}")
+# print(f"entropies: {entropies.shape}")
+# print(f"advantages: {advantages.shape}")
+# print(f"I: {I.shape}")
