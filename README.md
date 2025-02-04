@@ -34,10 +34,16 @@ Also, you can find various RL algorithms under the "tabular.rl-algorithms.agents
   - Policy-based:
     1. REINFORCE
     2. REINFORCE with baseline / Vanilla Policy Gradient (VPG)
-    3. Actor-Critic
-    4. N-step Actor-Critic
-    5. Actor-Critic with Generalized Advantage Estimation (GAE) (n-step lambda-return)
-    6. Asynchronous Advantage Actor-Critic (A3C)
-    7. Asynchronous Advantage Actor-Critic (A3C) with Generalized Advantage Estimation (GAE) (n-step lambda-return)
-
+- Advanced Function approximation methods:
+  - Advanced policy gradient methods:
+    1. Actor-Critic
+    2. N-step Actor-Critic
+    3. Actor-Critic with Generalized Advantage Estimation (GAE) (n-step lambda-return)
+    4. Asynchronous Advantage Actor-Critic (A3C)
+    5. N-step Asynchronous Advantage Actor-Critic (A3C)
+    6. Asynchronous Advantage Actor-Critic (A3C) with Generalized Advantage Estimation (GAE) (n-step lambda-return)
+    7. Advantage Actor-Critic (A2C)
+    8. N-step Advantage Actor-Critic (A2C)
+    9. Advantage Actor-Critic (A2C) with Generalized Advantage Estimation (GAE) (n-step lambda-return)
+  
 You can run and evaluate different algorithms on the FrozenLake environment using the "run_tabular.py" and "run_function_approximation.py" modules on the root directory.
