@@ -34,7 +34,7 @@ Also, you can find various RL algorithms under the "tabular.rl-algorithms.agents
   - Policy-based:
     1. REINFORCE
     2. REINFORCE with baseline / Vanilla Policy Gradient (VPG)
-- Advanced Function approximation methods:
+- Advanced function approximation methods:
   - Advanced policy gradient methods:
     1. Actor-Critic
     2. N-step Actor-Critic
