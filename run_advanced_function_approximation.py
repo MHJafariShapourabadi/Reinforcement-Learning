@@ -22,7 +22,7 @@ from advanced_function_approximation.environments.frozen_lake.custom_frozen_lake
 
 from advanced_function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
 from advanced_function_approximation.rl_algorithms.agents import A2C, NStepA2C, A2CGAE, \
-ActorCritic, NStepActorCritic, ActorCriticGAE
+A3C, NStepA3C, A3CGAE, ActorCritic, NStepActorCritic, ActorCriticGAE
 
 from advanced_function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from advanced_function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -125,29 +125,6 @@ if __name__ == "__main__":
 
     # %%
 
-    # agent = A2C(
-    #     env=vector_env,
-    #     actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
-    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-    #     seed=None, verbose=False
-    # )
-
-    # agent = NStepA2C(
-    #     env=vector_env, n_step=5,
-    #     actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
-    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-    #     seed=None, verbose=False
-    # )
-
-    agent = A2CGAE(
-        env=vector_env, n_step=5, lambd=0.6,
-        actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
-        critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-        gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-        seed=None, verbose=False
-    )
 
     # agent = ActorCritic(
     #     env_class=env_class,
@@ -182,6 +159,67 @@ if __name__ == "__main__":
     # )
 
 
+# %%
+
+    # agent = A2C(
+    #     env=vector_env,
+    #     actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    # agent = NStepA2C(
+    #     env=vector_env, n_step=5,
+    #     actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    agent = A2CGAE(
+        env=vector_env, n_step=5, lambd=0.6,
+        actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+        critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+        gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+        seed=None, verbose=False
+    )
+
+# %%
+
+    # agent = A3C(
+    #     env_class=env_class,
+    #     input_dim=modified_env.observation_shape[0], 
+    #     action_dim=modified_env.action_space.n,
+    #     actor_lr_start=1e-3, actor_lr_end=1e-4, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-3, critic_lr_end=1e-4, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    # agent = NStepA3C(
+    #     env_class=env_class,
+    #     input_dim=modified_env.observation_shape[0], 
+    #     action_dim=modified_env.action_space.n,
+    #     n_step=5,
+    #     actor_lr_start=1e-3, actor_lr_end=1e-4, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-3, critic_lr_end=1e-4, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+    # agent = A3CGAE(
+    #     env_class=env_class,
+    #     input_dim=modified_env.observation_shape[0], 
+    #     action_dim=modified_env.action_space.n,
+    #     n_step=5, lambd = 0.5,
+    #     actor_lr_start=1e-3, actor_lr_end=1e-4, actor_lr_decay=0.00005, actor_decay="exponential",
+    #     critic_lr_start=1e-3, critic_lr_end=1e-4, critic_lr_decay=0.00005, critic_decay="exponential",
+    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
+    #     seed=None, verbose=False
+    # )
+
+
 
 
     # %%
@@ -207,10 +245,7 @@ if __name__ == "__main__":
 
     all_states_vectors = torch.tensor(modified_env.state_to_vector, dtype=torch.float32, device=agent.device)
 
-    # For other methods except Actor-Critic and A3C:
-    # qtable = agent.policy_net(all_states_vectors).detach().cpu().numpy()
-
-    # For other Actor-Critic methods:
+    # For other Actor-Critic and A2C methods:
     qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
 
     # For A3C:
@@ -294,3 +329,12 @@ if __name__ == "__main__":
 # print(f"entropies: {entropies.shape}")
 # print(f"advantages: {advantages.shape}")
 # print(f"I: {I.shape}")
+
+# print("=================================")
+# print(f"state: {state.shape}")
+# print(f"next state: {next_state.shape}")
+# print(f"actions_logits: {action_logits.shape}")
+# print(f"states value: {state_value.shape}")
+# print(f"next states value: {next_state_value.shape}")
+# print(f"advantages: {advantage.shape}")
+# print(f"target: {target.shape}")
