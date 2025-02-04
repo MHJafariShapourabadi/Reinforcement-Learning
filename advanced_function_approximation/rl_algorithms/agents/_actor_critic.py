@@ -1,84 +1,11 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import torch.multiprocessing as mp
 import torch.nn.functional as F
 from torch.distributions.categorical import Categorical
 import numpy as np
 import time
-import random
 import gc
-
-
-
-class SahredLambdaLRScheduler(optim.lr_scheduler.LambdaLR):
-    def __init__(self, optimizer, lr_lambda, *args, **kwargs):
-        super(SahredLambdaLRScheduler, self).__init__(optimizer=optimizer, lr_lambda=lr_lambda, *args, **kwargs)
-        self.last_epoch = torch.tensor(self.last_epoch).share_memory_()
-
-    def _initial_step(self):
-        """Initialize step counts and perform a step."""
-        self._step_count = torch.zeros(1).share_memory_()
-        self.step()
-
-
-class SharedAdam(torch.optim.Adam):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False):
-        super(SharedAdam, self).__init__(
-            params, lr=lr, betas=betas, eps=eps, 
-            weight_decay=weight_decay, amsgrad=amsgrad)
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                state['step'] = 0
-                state['shared_step'] = torch.zeros(1).share_memory_()
-                state['exp_avg'] = torch.zeros_like(p.data).share_memory_()
-                state['exp_avg_sq'] = torch.zeros_like(p.data).share_memory_()
-                if weight_decay:
-                    state['weight_decay'] = torch.zeros_like(p.data).share_memory_()
-                if amsgrad:
-                    state['max_exp_avg_sq'] = torch.zeros_like(p.data).share_memory_()
-
-    def step(self, closure=None):
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-                self.state[p]['steps'] = self.state[p]['shared_step'].item()
-                self.state[p]['shared_step'] += 1
-        super().step(closure)
-
-
-
-
-
-
-class SharedAdamW(torch.optim.AdamW):
-    def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0, amsgrad=False):
-        super(SharedAdamW, self).__init__(
-            params, lr=lr, betas=betas, eps=eps, 
-            weight_decay=weight_decay, amsgrad=amsgrad)
-        for group in self.param_groups:
-            for p in group['params']:
-                state = self.state[p]
-                state['step'] = 0
-                state['shared_step'] = torch.zeros(1).share_memory_()
-                state['exp_avg'] = torch.zeros_like(p.data).share_memory_()
-                state['exp_avg_sq'] = torch.zeros_like(p.data).share_memory_()
-                if weight_decay:
-                    state['weight_decay'] = torch.zeros_like(p.data).share_memory_()
-                if amsgrad:
-                    state['max_exp_avg_sq'] = torch.zeros_like(p.data).share_memory_()
-
-    def step(self, closure=None):
-        for group in self.param_groups:
-            for p in group['params']:
-                if p.grad is None:
-                    continue
-                self.state[p]['steps'] = self.state[p]['shared_step'].item()
-                self.state[p]['shared_step'] += 1
-        super().step(closure)
-
 
 
 
@@ -159,7 +86,7 @@ class Critic(nn.Module):
 
 
 
-class A3C:
+class ActorCritic:
     def __init__(self, env_class,
     input_dim, action_dim,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
@@ -198,53 +125,32 @@ class A3C:
 
         self.seed = seed if seed is not None else int(time.time())
         torch.manual_seed(seed=self.seed)
-        np.random.seed(self.seed)
         self.rng = np.random.default_rng(seed=self.seed)
-        random.seed(self.seed)
 
         self.verbose = verbose
         self._is_training = True
 
-        self.device = self._get_device(0)
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # actor network
-        self.global_actor = Actor(input_dim, action_dim).to(self.device).share_memory()
+        self.actor= Actor(input_dim, action_dim).to(self.device)
         # critic network
-        self.global_critic = Critic(input_dim).to(self.device).share_memory()
+        self.critic = Critic(input_dim).to(self.device)
         
         # Optimizer for actor network
-        # self.actor_optimizer = optim.Adam(self.global_actor.parameters(), lr=self.lr_start)
-        # self.actor_optimizer = optim.AdamW(self.global_actor.parameters(), lr=self.actor_lr_start, amsgrad=True)
-        # self.actor_optimizer = SharedAdam(self.global_actor.parameters(), lr=actor_lr_start)
-        self.actor_optimizer = SharedAdamW(self.global_actor.parameters(), lr=actor_lr_start, amsgrad=True)
-        # self.actor_scheduler = optim.lr_scheduler.LambdaLR(self.actor_optimizer, lr_lambda=self.update_actor_learning_rate)
-        self.actor_scheduler = SahredLambdaLRScheduler(self.actor_optimizer, lr_lambda=self.update_actor_learning_rate)
+        # self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=self.lr_start)
+        self.actor_optimizer = optim.AdamW(self.actor.parameters(), lr=self.actor_lr_start, amsgrad=True)
+        self.actor_scheduler = optim.lr_scheduler.LambdaLR(self.actor_optimizer, lr_lambda=self.update_actor_learning_rate)
 
         # Optimizer for critic network
-        # self.critic_optimizer = optim.Adam(self.global_critic.parameters(), lr=self.lr_start)
-        # self.critic_optimizer = optim.AdamW(self.global_critic.parameters(), lr=self.critic_lr_start, amsgrad=True)
-        # self.critic_optimizer = SharedAdam(self.global_critic.parameters(), lr=critic_lr_start)
-        self.critic_optimizer = SharedAdamW(self.global_critic.parameters(), lr=critic_lr_start, amsgrad=True)
-        # self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
-        self.critic_scheduler = SahredLambdaLRScheduler(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
+        # self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.lr_start)
+        self.critic_optimizer = optim.AdamW(self.critic.parameters(), lr=self.critic_lr_start, amsgrad=True)
+        self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
         self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
 
         self.steps = 0
 
         self.training()
-
-    @staticmethod
-    def _get_device(worker_id):
-        """Get the available device (CPU or GPU)."""
-        if torch.cuda.is_available():
-            num_gpus = torch.cuda.device_count()
-            # Assign GPU based on worker ID
-            device_id = worker_id % num_gpus
-            device = torch.device(f"cuda:{device_id}")
-        else:
-            device = torch.device("cpu")
-        return device
-
 
     @property
     def is_training(self):
@@ -253,30 +159,25 @@ class A3C:
     def training(self):
         self._is_training = True
         torch.manual_seed(seed=self.seed)
-        np.random.seed(seed=self.seed)
         self.rng = np.random.default_rng(seed=self.seed)
-        random.seed(self.seed)
-        self.global_actor.train()
-        self.global_critic.train()
+        self.actor.train()
+        self.critic.train()
 
     def evaluating(self, seed=None):
         self._is_training = False
         seed = seed if seed is not None else self.seed
         torch.manual_seed(seed=seed)
-        np.random.seed(seed=seed)
         self.rng = np.random.default_rng(seed=seed)
-        random.seed(seed)
-        self.global_actor.eval()
-        self.global_critic.eval()
+        self.actor.eval()
+        self.critic.eval()
 
 
     @torch.no_grad()
     def select_action(self, state, info):
-        observation = info['observation']
-        observation = torch.tensor(observation, dtype=torch.float32, device=self.device).unsqueeze(0)
+        state = torch.tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
         with torch.no_grad():
-            self.global_actor.eval()
-            logits = self.global_actor(observation).squeeze(0).detach()
+            self.actor.eval()
+            logits = self.actor(state).squeeze(0).detach()
         if self.is_training:
             dist = Categorical(logits=logits)
             action = dist.sample().item()
@@ -300,36 +201,26 @@ class A3C:
         random_index = self.rng.integers(len(max_indices)) # Choose one index randomly
         return max_indices[random_index].item()
 
-    def worker(self, worker_id, *args):
-        """
-        Worker function to interact with the environment and update the global networks.
-        :param worker_id: ID of the worker.
-        """
-        device = self._get_device(worker_id)
+    def train(self, max_episodes):
+        self.actor.train()
+        self.critic.train()
+        episode_rewards = []
+        episode_steps = []
+        self.steps = 0
 
-        local_seed = self.seed + worker_id
-        env = self.env_class.create_env(*args)
-        torch.manual_seed(local_seed) ; np.random.seed(local_seed) ; random.seed(local_seed)
-
-        local_actor = Actor(self.input_dim, self.action_dim).to(device)
-        local_critic = Critic(self.input_dim).to(device)
-        local_actor.load_state_dict(self.global_actor.state_dict())
-        local_critic.load_state_dict(self.global_critic.state_dict())
-
-        while True:
+        for episode in range(max_episodes):
             state, info = self.env.reset()
             done = False
 
-            I = torch.tensor(1.0).to(device)
+            state = torch.tensor(state, dtype=torch.float32).unsqueeze(0).to(self.device)
+            I = torch.tensor(1.0).to(self.device)
 
             episode_reward = 0
             steps_in_episode = 0
 
             while True:
-                observation = info['observation']
-                observation = torch.tensor(observation, dtype=torch.float32).unsqueeze(0).to(device)
-                action_logits = local_actor(observation)
-                state_value = local_critic(observation)
+                action_logits = self.actor(state)
+                state_value = self.critic(state)
                 action_dist = torch.distributions.Categorical(logits=action_logits)
                 action = action_dist.sample()
                 log_prob = action_dist.log_prob(action)
@@ -338,97 +229,43 @@ class A3C:
                 next_state, reward, terminated, truncated, next_info = self.env.step(action.item())
                 done = terminated or truncated
 
-                next_observation = next_info['observation']
-                next_observation = torch.tensor(next_observation, dtype=torch.float32).unsqueeze(0).to(device)
+                next_state = torch.tensor(next_state, dtype=torch.float32).unsqueeze(0).to(self.device)
                 with torch.no_grad():
-                    next_state_value = local_critic(next_observation).detach()
+                    next_state_value = self.critic(next_state).detach()
                 
                 target = reward + self.gamma * next_state_value
                 critic_loss = self.critic_criterion(state_value, target)
 
-                local_critic.zero_grad()
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
-                for global_param, local_param in zip(self.global_critic.parameters(), local_critic.parameters()):
-                            if global_param.grad is None:
-                                global_param._grad = local_param.grad
                 self.critic_optimizer.step()
                 self.critic_scheduler.step()
-                local_critic.load_state_dict(self.global_critic.state_dict())
 
                 advantage = target - state_value.detach()
                 actor_loss = -(I * advantage * log_prob) - self.entropy_coef * entropy
 
-                local_actor.zero_grad()
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
-                for global_param, local_param in zip(self.global_actor.parameters(), local_actor.parameters()):
-                            if global_param.grad is None:
-                                global_param._grad = local_param.grad
                 self.actor_optimizer.step()
                 self.actor_scheduler.step()
-                local_actor.load_state_dict(self.global_actor.state_dict())
 
                 I *= self.gamma
                 state = next_state
                 info = next_info
 
                 episode_reward += reward
+                self.steps += 1
                 steps_in_episode += 1
 
                 if done:
                     gc.collect()
                     break
 
-            if self.get_out_signal: 
-                gc.collect()
-                break
+            episode_rewards.append(episode_reward)
+            episode_steps.append(steps_in_episode)
+            print(f"Episode {episode + 1}, Reward: {episode_reward}, Steps: {steps_in_episode}, actor lr: {self.actor_scheduler.get_last_lr()[0] : .5f}, critic lr: {self.critic_scheduler.get_last_lr()[0] : .5f}")
 
-            with self.get_out_lock:
-                self.episode_rewards[self.episode.item()] = episode_reward
-                self.episode_steps[self.episode.item()] = steps_in_episode
-                print(f"Episode {self.episode.item() + 1}, Reward: {episode_reward}, Steps: {steps_in_episode}, actor lr: {self.actor_scheduler.get_last_lr()[0] : .5f}, critic lr: {self.critic_scheduler.get_last_lr()[0] : .5f}")
-                self.episode.add_(1)
-                if self.episode.item() >= self.max_episodes:
-                    self.get_out_signal.add_(1)
-
-    def train(self, *, max_episodes=1000, num_workers=4, envs_args=None):
-        """
-        Train the A3C algorithm using multiple worker processes.
-        :param num_workers: Number of worker processes.
-        :param max_episodes: Maximum number of episodes for each worker.
-        """
-        self.global_actor.train()
-        self.global_critic.train()
-
-        self.episode = torch.zeros(1, dtype=torch.int).share_memory_()
-        self.max_episodes = max_episodes
-
-        self.get_out_lock = mp.Lock()
-        self.get_out_signal = torch.zeros(1, dtype=torch.int).share_memory_()
-
-        self.episode_rewards = torch.zeros([max_episodes]).share_memory_()
-        self.episode_steps = torch.zeros([max_episodes], dtype=torch.int).share_memory_()
-
-        processes = []
-        if envs_args is not None:
-            num_workers = len(envs_args)
-            for worker_id in range(num_workers):
-                args = envs_args[worker_id]
-                process = mp.Process(target=self.worker, args=(worker_id, *args))
-                process.start()
-                processes.append(process)
-        else:
-            for worker_id in range(num_workers):
-                process = mp.Process(target=self.worker, args=(worker_id,))
-                process.start()
-                processes.append(process)
-
-
-        for process in processes:
-            process.join()
-
-        return self.episode_rewards, self.episode_steps
+        return episode_rewards, episode_steps
 
     def update_actor_learning_rate(self, step):
         """
