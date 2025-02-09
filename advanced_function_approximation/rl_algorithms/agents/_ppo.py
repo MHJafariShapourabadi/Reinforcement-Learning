@@ -6,8 +6,6 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import gc
-from collections import deque
-from itertools import count
 
 
 
@@ -16,55 +14,46 @@ from itertools import count
 
 
 
-class SpecialDeque:
-    def __init__(self, maxlen):
-        self.maxlen = maxlen
-        self.list = [None] * maxlen
-        self.last_item = None
-        self.start_idx = 0
-        self.end_idx = 0
+class ReplayBuffer:
+    def __init__(self, capacity, n_envs, state_dim, seed=None):
+        self.capacity = ((capacity // n_envs) + 1) * n_envs
+        self.n_envs = n_envs
         self.size = 0
-        self.full = False
-        self.empty = True
+        self.pos = 0  # Pointer to the next position to overwrite
+        self.seed = seed
+        self.rng = np.random.default_rng(seed=seed)
 
-    def append(self, value):
-        self.list[self.end_idx] = value
-        self.size = min(self.size + 1, self.maxlen)
-        self.end_idx = (self.end_idx + 1) % self.maxlen
-        self.empty = False
-        if self.end_idx == self.start_idx:
-            self.full = True
-        if self.full:
-            self.start_idx = self.end_idx
+        # Pre-allocate memory for transitions
+        self.I = torch.zeros((self.capacity,), dtype=torch.float32)
+        self.states = torch.zeros((self.capacity, state_dim), dtype=torch.float32)
+        self.actions = torch.zeros((self.capacity,), dtype=torch.int64)
+        self.log_probs = torch.zeros((self.capacity,), dtype=torch.float32)
+        self.returns = torch.zeros((self.capacity,), dtype=torch.float32)
 
-    def append_last(self, value):
-        self.last_item = value
+    def push(self, I, states, actions, log_probs, returns):
+        """Store a transition in the buffer."""
+        self.I[self.pos : self.pos + self.n_envs] = I
+        self.states[self.pos : self.pos + self.n_envs] = states
+        self.actions[self.pos : self.pos + self.n_envs] = actions
+        self.log_probs[self.pos : self.pos + self.n_envs] = log_probs
+        self.returns[self.pos : self.pos + self.n_envs] = returns
 
-    def popleft(self):
-        if self.empty:
-            raise Exception("Poping empty deque.")
-        value = self.list[self.start_idx]
-        self.size = max(self.size - 1, 0)
-        self.start_idx = (self.start_idx + 1) % self.maxlen
-        self.full = False
-        if self.start_idx == self.end_idx:
-            self.empty = True
-        return value
-
-    def __getitem__(self, index):
-        if index == self.maxlen:
-            return self.last_item
-        else:
-            if index > self.maxlen or index < - self.maxlen:
-                raise IndexError("Index out of deque range.")
-            index = (index + self.start_idx) % self.maxlen
-            return self.list[index]
+        self.pos = (self.pos + self.n_envs) % self.capacity
+        self.size = min(self.size + self.n_envs, self.capacity)
+    
+    def sample(self, batch_size):
+        """Sample a random batch of transitions."""
+        indices = self.rng.choice(self.size, size=batch_size, replace=False, shuffle=True)
+        return (
+            self.I[indices],
+            self.states[indices],
+            self.actions[indices],
+            self.log_probs[indices],
+            self.returns[indices],
+        )
 
     def __len__(self):
         return self.size
-
-    def __repr__(self):
-        return f"{self.list}"
 
 
 
@@ -145,17 +134,16 @@ class Critic(nn.Module):
 
 
 
-class A2CGAE:
-    def __init__(self, env, n_step, lambd = 0.9,
+class PPO:
+    def __init__(self, env,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
-    entropy_coef=0.01, Huberbeta=1.0,
+    buffer_size=256, batch_size=64,
+    clip_epsilon=0.2, entropy_coef=0.01, Huberbeta=1.0,
     gamma=0.99, seed=None, verbose=False):
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.n
-        self.n_step = n_step
-        self.lambd = lambd
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -175,6 +163,10 @@ class A2CGAE:
         self.critic_lr_decay = critic_lr_decay 
         self.critic_decay = critic_decay
 
+        self.buffer_size = buffer_size
+        self.batch_size = batch_size
+
+        self.clip_epsilon = clip_epsilon
         self.entropy_coef = entropy_coef
         self.Huberbeta = Huberbeta
         self.gamma = gamma
@@ -203,6 +195,10 @@ class A2CGAE:
         self.critic_optimizer = optim.AdamW(self.critic.parameters(), lr=self.critic_lr_start, amsgrad=True)
         self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
         self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
+
+        # Prioritized Replay Buffer
+        self.buffer = ReplayBuffer(capacity=buffer_size, n_envs=self.env.n_envs,
+                                   state_dim=self.state_dim, seed=self.seed)
 
         self.steps = 0
 
@@ -264,28 +260,21 @@ class A2CGAE:
         episode_steps = []
         self.steps = 0
 
-        n_values = SpecialDeque(maxlen=self.n_step)
-        n_log_probs = SpecialDeque(maxlen=self.n_step)
-        n_entropies = SpecialDeque(maxlen=self.n_step)
-        n_rewards = SpecialDeque(maxlen=self.n_step)
-        n_I = SpecialDeque(maxlen=self.n_step)
-        n_terminateds = SpecialDeque(maxlen=self.n_step)
-
         episodes = 0
         I, states, infos = self.env.reset()
 
         I = torch.tensor(I, dtype=torch.float32).to(self.device)
         states = torch.tensor(states, dtype=torch.float32).to(self.device)
 
-        for t in count():
+        while True:
             actions_logits = self.actor(states)
-            states_value = self.critic(states)
             actions_dist = torch.distributions.Categorical(logits=actions_logits)
             actions = actions_dist.sample()
             log_probs = actions_dist.log_prob(actions)
-            entropies = actions_dist.entropy()
 
             next_I, next_states, rewards, terminateds, truncateds, next_infos = self.env.step(actions.cpu().numpy())
+            # dones = np.logical_or(terminateds, truncateds)
+            # episodes += np.sum(dones, keepdims=False)
 
             next_I = torch.tensor(next_I, dtype=torch.float32).to(self.device)
             next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
@@ -293,34 +282,35 @@ class A2CGAE:
             terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
-
-            n_values.append(states_value)
-            n_values.append_last(next_states_value)
-            n_log_probs.append(log_probs)
-            n_entropies.append(entropies)
-            n_rewards.append(rewards)
-            n_I.append(I)
-            n_terminateds.append(terminateds)
             
-            if t >= self.n_step - 1:
-                targets = 0.0
-                for i in reversed(range(self.n_step)):
-                    td_errors = n_rewards[i] + self.gamma * n_values[i + 1].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
-                    targets = (1.0 - n_terminateds[i]) * targets + ((self.gamma * self.lambd) ** i) * td_errors
-                targets += n_values[0].detach().clone()
-                
-                states_value = n_values[0]
-                critic_loss = self.critic_criterion(states_value, targets.detach())
+            targets = rewards + self.gamma * next_states_value * (1.0 - terminateds)
+
+            self.buffer.push(I, states, actions.detach(), log_probs.detach(), targets.detach())
+
+            if len(self.buffer) > self.batch_size:
+                # Sample from replay buffer with PER
+                mb_I, mb_states, mb_actions, mb_log_probs_old, mb_targets = self.buffer.sample(self.batch_size)
+                mb_I, mb_states, mb_actions, mb_log_probs_old, mb_targets = mb_I.to(self.device), mb_states.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device)
+
+                mb_states_value = self.critic(mb_states)
+                mb_actions_logits = self.actor(mb_states)
+                mb_actions_dist = torch.distributions.Categorical(logits=mb_actions_logits)
+                mb_log_probs = mb_actions_dist.log_prob(mb_actions)
+                mb_entropies = mb_actions_dist.entropy()
+
+
+                critic_loss = self.critic_criterion(mb_states_value, mb_targets)
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
                 self.critic_optimizer.step()
                 self.critic_scheduler.step()
 
-                log_probs = n_log_probs[0]
-                I_ = n_I[0]
-                entropies = n_entropies[0]
-                advantages = targets.detach() - states_value.detach()
-                actor_loss = (-(torch.pow(self.gamma, I_) * advantages * log_probs) - self.entropy_coef * entropies).mean()
+                # Compute ratio.
+                mb_advantages = mb_targets - mb_states_value.detach()
+                ratio = torch.exp(mb_log_probs - mb_log_probs_old)
+                surr1 = ratio * mb_advantages
+                surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * mb_advantages
+                actor_loss = (- torch.pow(self.gamma, mb_I) * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
                 self.actor_optimizer.step()

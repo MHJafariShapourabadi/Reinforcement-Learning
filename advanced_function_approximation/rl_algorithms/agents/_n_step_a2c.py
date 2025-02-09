@@ -294,11 +294,6 @@ class NStepA2C:
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
 
-            I = next_I
-            states = next_states
-            infos = next_infos
-            self.steps += 1
-
             n_values.append(states_value)
             n_log_probs.append(log_probs)
             n_entropies.append(entropies)
@@ -306,7 +301,6 @@ class NStepA2C:
             n_I.append(I)
             n_terminateds.append(terminateds)
 
-            
             if t >= self.n_step - 1:
                 targets = next_states_value
                 for i in reversed(range(self.n_step)):
@@ -320,14 +314,19 @@ class NStepA2C:
                 self.critic_scheduler.step()
 
                 log_probs = n_log_probs[0]
-                I = n_I[0]
+                I_ = n_I[0]
                 entropies = n_entropies[0]
                 advantages = targets - states_value.detach()
-                actor_loss = (-(torch.pow(self.gamma, I) * advantages * log_probs) - self.entropy_coef * entropies).mean()
+                actor_loss = (-(torch.pow(self.gamma, I_) * advantages * log_probs) - self.entropy_coef * entropies).mean()
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
                 self.actor_optimizer.step()
                 self.actor_scheduler.step()
+
+            I = next_I
+            states = next_states
+            infos = next_infos
+            self.steps += 1
 
             for worker_id in range(len(infos)):
                 info = infos[worker_id]

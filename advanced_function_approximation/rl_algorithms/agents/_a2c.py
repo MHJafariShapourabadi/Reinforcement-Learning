@@ -227,8 +227,6 @@ class A2C:
             terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
-            rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
-            terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
             
             targets = rewards + self.gamma * next_states_value * (1.0 - terminateds)
             critic_loss = self.critic_criterion(states_value, targets)
