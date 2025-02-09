@@ -232,7 +232,7 @@ if __name__ == "__main__":
             actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
             critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
             buffer_size=256, batch_size=64,
-            clip_epsilon=0.1, entropy_coef=0.0001, Huberbeta=1.0, gamma=0.99,
+            r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001, gamma=0.99,
             seed=None, verbose=False
         )
 

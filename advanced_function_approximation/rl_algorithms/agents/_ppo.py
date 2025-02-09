@@ -26,14 +26,16 @@ class ReplayBuffer:
         # Pre-allocate memory for transitions
         self.I = torch.zeros((self.capacity,), dtype=torch.float32)
         self.states = torch.zeros((self.capacity, state_dim), dtype=torch.float32)
+        self.values = torch.zeros((self.capacity,), dtype=torch.float32)
         self.actions = torch.zeros((self.capacity,), dtype=torch.int64)
         self.log_probs = torch.zeros((self.capacity,), dtype=torch.float32)
         self.returns = torch.zeros((self.capacity,), dtype=torch.float32)
 
-    def push(self, I, states, actions, log_probs, returns):
+    def push(self, I, states, values, actions, log_probs, returns):
         """Store a transition in the buffer."""
         self.I[self.pos : self.pos + self.n_envs] = I
         self.states[self.pos : self.pos + self.n_envs] = states
+        self.values[self.pos : self.pos + self.n_envs] = values
         self.actions[self.pos : self.pos + self.n_envs] = actions
         self.log_probs[self.pos : self.pos + self.n_envs] = log_probs
         self.returns[self.pos : self.pos + self.n_envs] = returns
@@ -47,6 +49,7 @@ class ReplayBuffer:
         return (
             self.I[indices],
             self.states[indices],
+            self.values[indices],
             self.actions[indices],
             self.log_probs[indices],
             self.returns[indices],
@@ -139,7 +142,7 @@ class PPO:
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     buffer_size=256, batch_size=64,
-    clip_epsilon=0.2, entropy_coef=0.01, Huberbeta=1.0,
+    r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.01,
     gamma=0.99, seed=None, verbose=False):
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
@@ -166,9 +169,9 @@ class PPO:
         self.buffer_size = buffer_size
         self.batch_size = batch_size
 
-        self.clip_epsilon = clip_epsilon
+        self.r_clip_epsilon = r_clip_epsilon
+        self.v_clip_epsilon = v_clip_epsilon
         self.entropy_coef = entropy_coef
-        self.Huberbeta = Huberbeta
         self.gamma = gamma
 
         self.seed = seed if seed is not None else int(time.time())
@@ -194,7 +197,7 @@ class PPO:
         # self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.lr_start)
         self.critic_optimizer = optim.AdamW(self.critic.parameters(), lr=self.critic_lr_start, amsgrad=True)
         self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
-        self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
+        # self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
 
         # Prioritized Replay Buffer
         self.buffer = ReplayBuffer(capacity=buffer_size, n_envs=self.env.n_envs,
@@ -268,6 +271,7 @@ class PPO:
 
         while True:
             actions_logits = self.actor(states)
+            states_value = self.critic(states)
             actions_dist = torch.distributions.Categorical(logits=actions_logits)
             actions = actions_dist.sample()
             log_probs = actions_dist.log_prob(actions)
@@ -285,12 +289,12 @@ class PPO:
             
             targets = rewards + self.gamma * next_states_value * (1.0 - terminateds)
 
-            self.buffer.push(I, states, actions.detach(), log_probs.detach(), targets.detach())
+            self.buffer.push(I, states, states_value.detach(), actions.detach(), log_probs.detach(), targets.detach())
 
             if len(self.buffer) > self.batch_size:
                 # Sample from replay buffer with PER
-                mb_I, mb_states, mb_actions, mb_log_probs_old, mb_targets = self.buffer.sample(self.batch_size)
-                mb_I, mb_states, mb_actions, mb_log_probs_old, mb_targets = mb_I.to(self.device), mb_states.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device)
+                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = self.buffer.sample(self.batch_size)
+                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = mb_I.to(self.device), mb_states.to(self.device), mb_states_value_old.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device)
 
                 mb_states_value = self.critic(mb_states)
                 mb_actions_logits = self.actor(mb_states)
@@ -299,7 +303,13 @@ class PPO:
                 mb_entropies = mb_actions_dist.entropy()
 
 
-                critic_loss = self.critic_criterion(mb_states_value, mb_targets)
+                # Unclipped value loss:
+                vf_loss_unclipped = (mb_targets - mb_states_value) ** 2
+                # Clipped value prediction:
+                clipped_values = mb_states_value_old + torch.clamp(mb_states_value - mb_states_value_old, -self.v_clip_epsilon, self.v_clip_epsilon)
+                vf_loss_clipped = (mb_targets - clipped_values) ** 2
+                # Final value function loss:
+                critic_loss = 0.5 * torch.mean(torch.max(vf_loss_unclipped, vf_loss_clipped))
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
                 self.critic_optimizer.step()
@@ -309,7 +319,7 @@ class PPO:
                 mb_advantages = mb_targets - mb_states_value.detach()
                 ratio = torch.exp(mb_log_probs - mb_log_probs_old)
                 surr1 = ratio * mb_advantages
-                surr2 = torch.clamp(ratio, 1 - self.clip_epsilon, 1 + self.clip_epsilon) * mb_advantages
+                surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
                 actor_loss = (- torch.pow(self.gamma, mb_I) * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
