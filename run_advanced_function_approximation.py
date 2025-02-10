@@ -23,7 +23,7 @@ from advanced_function_approximation.environments.frozen_lake.custom_frozen_lake
 from advanced_function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
 from advanced_function_approximation.rl_algorithms.agents import A2C, NStepA2C, A2CGAE, \
 A3C, NStepA3C, A3CGAE, ActorCritic, NStepActorCritic, ActorCriticGAE, \
-    PPO
+    PPO, NStepPPO, PPOGAE, PPOPER, NStepPPOPER, PPOGAEPER
 
 from advanced_function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from advanced_function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -227,14 +227,68 @@ if __name__ == "__main__":
 
     # %%
 
-    agent = PPO(
-            env=vector_env,
+    # agent = PPO(
+    #         env=vector_env,
+    #         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #         buffer_size=256, batch_size=64,
+    #         r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001, gamma=0.99,
+    #         seed=None, verbose=False
+    #     )
+
+
+    # agent = NStepPPO(
+    #         env=vector_env, n_step=5,
+    #         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #         buffer_size=256, batch_size=64,
+    #         r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001,
+    #         gamma=0.99, seed=None, verbose=False
+    # )
+
+
+    # agent = PPOGAE(
+    #         env=vector_env, n_step=5, lambd = 0.1,
+    #         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #         buffer_size=256, batch_size=64,
+    #         r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001,
+    #         gamma=0.99, seed=None, verbose=False
+    # )
+
+
+    # agent = PPOPER(
+    #         env=vector_env,
+    #         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #         buffer_size=256, batch_size=64,
+    #         alpha_start=0.6, alpha_end=0.8, alpha_increment=1e-3,
+    #         beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
+    #         r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001, gamma=0.99,
+    #         seed=None, verbose=False
+    #     )
+
+    # agent = NStepPPOPER(
+    #         env=vector_env, n_step=5,
+    #         actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
+    #         critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
+    #         buffer_size=256, batch_size=64,
+    #         alpha_start=0.6, alpha_end=0.8, alpha_increment=1e-3,
+    #         beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
+    #         r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001, gamma=0.99,
+    #         seed=None, verbose=False
+    # )
+
+    agent = PPOGAEPER(
+            env=vector_env, n_step=5, lambd = 0.2,
             actor_lr_start=1e-2, actor_lr_end=1e-2, actor_lr_decay=0.00005, actor_decay="exponential",
             critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
             buffer_size=256, batch_size=64,
+            alpha_start=0.6, alpha_end=0.8, alpha_increment=1e-3,
+            beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
             r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.0001, gamma=0.99,
             seed=None, verbose=False
-        )
+    )
 
 
     # %%

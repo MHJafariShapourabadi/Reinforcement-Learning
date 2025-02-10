@@ -6,6 +6,8 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import gc
+# from collections import deque
+from itertools import count
 
 
 
@@ -57,6 +59,65 @@ class ReplayBuffer:
 
     def __len__(self):
         return self.size
+
+
+
+
+
+
+
+
+
+
+class SpecialDeque:
+    def __init__(self, maxlen):
+        self.maxlen = maxlen
+        self.list = [None] * maxlen
+        self.last_item = None
+        self.start_idx = 0
+        self.end_idx = 0
+        self.size = 0
+        self.full = False
+        self.empty = True
+
+    def append(self, value):
+        self.list[self.end_idx] = value
+        self.size = min(self.size + 1, self.maxlen)
+        self.end_idx = (self.end_idx + 1) % self.maxlen
+        self.empty = False
+        if self.end_idx == self.start_idx:
+            self.full = True
+        if self.full:
+            self.start_idx = self.end_idx
+
+    def append_last(self, value):
+        self.last_item = value
+
+    def popleft(self):
+        if self.empty:
+            raise Exception("Poping empty deque.")
+        value = self.list[self.start_idx]
+        self.size = max(self.size - 1, 0)
+        self.start_idx = (self.start_idx + 1) % self.maxlen
+        self.full = False
+        if self.start_idx == self.end_idx:
+            self.empty = True
+        return value
+
+    def __getitem__(self, index):
+        if index == self.maxlen:
+            return self.last_item
+        else:
+            if index > self.maxlen or index < - self.maxlen:
+                raise IndexError("Index out of deque range.")
+            index = (index + self.start_idx) % self.maxlen
+            return self.list[index]
+
+    def __len__(self):
+        return self.size
+
+    def __repr__(self):
+        return f"{self.list}"
 
 
 
@@ -137,8 +198,8 @@ class Critic(nn.Module):
 
 
 
-class PPO:
-    def __init__(self, env,
+class NStepPPO:
+    def __init__(self, env, n_step,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     buffer_size=256, batch_size=64,
@@ -147,6 +208,7 @@ class PPO:
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.n
+        self.n_step = n_step
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -165,7 +227,7 @@ class PPO:
         self.critic_lr_end = critic_lr_end / self.env.dummy_env.n_active_features
         self.critic_lr_decay = critic_lr_decay 
         self.critic_decay = critic_decay
-
+        
         self.buffer_size = buffer_size
         self.batch_size = batch_size
 
@@ -198,7 +260,6 @@ class PPO:
         # self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=self.lr_start)
         self.critic_optimizer = optim.AdamW(self.critic.parameters(), lr=self.critic_lr_start, amsgrad=True)
         self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
-        # self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
 
         # Replay Buffer
         self.buffer = ReplayBuffer(capacity=buffer_size, n_envs=self.env.n_envs,
@@ -264,13 +325,22 @@ class PPO:
         episode_steps = []
         self.steps = 0
 
+        n_states = SpecialDeque(maxlen=self.n_step)
+        n_values = SpecialDeque(maxlen=self.n_step)
+        n_actions = SpecialDeque(maxlen=self.n_step)
+        n_log_probs = SpecialDeque(maxlen=self.n_step)
+        n_entropies = SpecialDeque(maxlen=self.n_step)
+        n_rewards = SpecialDeque(maxlen=self.n_step)
+        n_I = SpecialDeque(maxlen=self.n_step)
+        n_terminateds = SpecialDeque(maxlen=self.n_step)
+
         episodes = 0
         I, states, infos = self.env.reset()
 
         I = torch.tensor(I, dtype=torch.float32).to(self.device)
         states = torch.tensor(states, dtype=torch.float32).to(self.device)
 
-        while True:
+        for t in count():
             actions_logits = self.actor(states)
             states_value = self.critic(states)
             actions_dist = torch.distributions.Categorical(logits=actions_logits)
@@ -278,8 +348,6 @@ class PPO:
             log_probs = actions_dist.log_prob(actions)
 
             next_I, next_states, rewards, terminateds, truncateds, next_infos = self.env.step(actions.cpu().numpy())
-            # dones = np.logical_or(terminateds, truncateds)
-            # episodes += np.sum(dones, keepdims=False)
 
             next_I = torch.tensor(next_I, dtype=torch.float32).to(self.device)
             next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
@@ -287,45 +355,56 @@ class PPO:
             terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
-            
-            targets = rewards + self.gamma * next_states_value * (1.0 - terminateds)
 
-            self.buffer.push(I.detach().cpu(), states.detach().cpu(), states_value.detach().cpu(), actions.detach().cpu(), log_probs.detach().cpu(), targets.detach().cpu())
+            n_states.append(states)
+            n_values.append(states_value.detach())
+            n_actions.append(actions.detach())
+            n_log_probs.append(log_probs.detach())
+            n_rewards.append(rewards)
+            n_I.append(I)
+            n_terminateds.append(terminateds)
 
-            if len(self.buffer) > self.batch_size:
-                # Sample from replay buffer with PER
-                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = self.buffer.sample(self.batch_size)
-                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = mb_I.to(self.device), mb_states.to(self.device), mb_states_value_old.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device)
+            if t >= self.n_step - 1:
+                targets = next_states_value
+                for i in reversed(range(self.n_step)):
+                    targets = n_rewards[i] + self.gamma * targets * (1.0 - n_terminateds[i])
 
-                mb_states_value = self.critic(mb_states)
-                mb_actions_logits = self.actor(mb_states)
-                mb_actions_dist = torch.distributions.Categorical(logits=mb_actions_logits)
-                mb_log_probs = mb_actions_dist.log_prob(mb_actions)
-                mb_entropies = mb_actions_dist.entropy()
+                self.buffer.push(n_I[0].detach().cpu(), n_states[0].detach().cpu(), n_values[0].detach().cpu(), n_actions[0].detach().cpu(), n_log_probs[0].detach().cpu(), targets.detach().cpu())
+                
+                if len(self.buffer) > self.batch_size:
+                    # Sample from replay buffer with PER
+                    mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = self.buffer.sample(self.batch_size)
+                    mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = mb_I.to(self.device), mb_states.to(self.device), mb_states_value_old.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device)
+
+                    mb_states_value = self.critic(mb_states)
+                    mb_actions_logits = self.actor(mb_states)
+                    mb_actions_dist = torch.distributions.Categorical(logits=mb_actions_logits)
+                    mb_log_probs = mb_actions_dist.log_prob(mb_actions)
+                    mb_entropies = mb_actions_dist.entropy()
 
 
-                # Unclipped value loss:
-                vf_loss_unclipped = (mb_targets - mb_states_value) ** 2
-                # Clipped value prediction:
-                clipped_values = mb_states_value_old + torch.clamp(mb_states_value - mb_states_value_old, -self.v_clip_epsilon, self.v_clip_epsilon)
-                vf_loss_clipped = (mb_targets - clipped_values) ** 2
-                # Final value function loss:
-                critic_loss = 0.5 * torch.mean(torch.max(vf_loss_unclipped, vf_loss_clipped))
-                self.critic_optimizer.zero_grad()
-                critic_loss.backward()
-                self.critic_optimizer.step()
-                self.critic_scheduler.step()
+                    # Unclipped value loss:
+                    vf_loss_unclipped = (mb_targets - mb_states_value) ** 2
+                    # Clipped value prediction:
+                    clipped_values = mb_states_value_old + torch.clamp(mb_states_value - mb_states_value_old, -self.v_clip_epsilon, self.v_clip_epsilon)
+                    vf_loss_clipped = (mb_targets - clipped_values) ** 2
+                    # Final value function loss:
+                    critic_loss = 0.5 * torch.mean(torch.max(vf_loss_unclipped, vf_loss_clipped))
+                    self.critic_optimizer.zero_grad()
+                    critic_loss.backward()
+                    self.critic_optimizer.step()
+                    self.critic_scheduler.step()
 
-                # Compute ratio.
-                mb_advantages = mb_targets - mb_states_value.detach()
-                ratio = torch.exp(mb_log_probs - mb_log_probs_old)
-                surr1 = ratio * mb_advantages
-                surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
-                actor_loss = (- torch.pow(self.gamma, mb_I) * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
-                self.actor_optimizer.zero_grad()
-                actor_loss.backward()
-                self.actor_optimizer.step()
-                self.actor_scheduler.step()
+                    # Compute ratio.
+                    mb_advantages = mb_targets - mb_states_value.detach()
+                    ratio = torch.exp(mb_log_probs - mb_log_probs_old)
+                    surr1 = ratio * mb_advantages
+                    surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
+                    actor_loss = (- torch.pow(self.gamma, mb_I) * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
+                    self.actor_optimizer.zero_grad()
+                    actor_loss.backward()
+                    self.actor_optimizer.step()
+                    self.actor_scheduler.step()
 
             I = next_I
             states = next_states

@@ -8,7 +8,12 @@ from ._a3c import A3C
 from ._n_step_a3c import NStepA3C
 from ._a3c_gae import A3CGAE
 from ._ppo import PPO
+from ._n_step_ppo import NStepPPO
+from ._ppo_gae import PPOGAE
+from ._ppo_per import PPOPER
+from ._n_step_ppo_per import NStepPPOPER
+from ._ppo_gae_per import PPOGAEPER
 
 __all__ = ["A2C", "NStepA2C", "A2CGAE", "A3C", "NStepA3C", "A3CGAE",
 "ActorCritic", "NStepActorCritic", "ActorCriticGAE",
-"PPO"]
+"PPO", "NStepPPO", "PPOGAE", "PPOPER", "NStepPPOPER", "PPOGAEPER"]

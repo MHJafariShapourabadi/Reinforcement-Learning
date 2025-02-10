@@ -14,12 +14,26 @@ import gc
 
 
 
-class ReplayBuffer:
-    def __init__(self, capacity, n_envs, state_dim, seed=None):
+class PrioritizedReplayBuffer:
+    def __init__(self, capacity, n_envs, state_dim, 
+                alpha_start=0.6, alpha_end=0.8, alpha_increment=1e-3,
+                beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
+                epsilon=1e-5, seed=None):
         self.capacity = ((capacity // n_envs) + 1) * n_envs
         self.n_envs = n_envs
         self.size = 0
         self.pos = 0  # Pointer to the next position to overwrite
+        self.alpha = alpha_start  # Controls how much prioritization is used
+        self.alpha_start = alpha_start
+        self.alpha_end = alpha_end
+        self.alpha_increment = alpha_increment
+        self.alpha_steps = 0
+        self.beta = beta_start  # Controls how much importance sampling is used
+        self.beta_start = beta_start
+        self.beta_end = beta_end
+        self.beta_increment = beta_increment
+        self.beta_steps = 0
+        self.epsilon = epsilon # Epsilon added to priorities for stability
         self.seed = seed
         self.rng = np.random.default_rng(seed=seed)
 
@@ -31,21 +45,57 @@ class ReplayBuffer:
         self.log_probs = torch.zeros((self.capacity,), dtype=torch.float32)
         self.returns = torch.zeros((self.capacity,), dtype=torch.float32)
 
+        # Initialize priorities (start with max priority for new transitions)
+        self.priorities = torch.zeros((self.capacity,), dtype=torch.float32)
+
+    def reset(self):
+      self.alpha = self.alpha_start
+      self.beta = self.beta_start
+      self.alpha_steps = 0
+      self.beta_steps = 0
+
+    def update_alpha(self, steps=None):
+      self.alpha_steps += 1
+      steps = self.alpha_steps if steps is None else steps
+      self.beta = min(self.alpha_end, self.alpha_start + self.alpha_increment * steps)
+
+    def update_beta(self, steps=None):
+      self.beta_steps += 1
+      steps = self.beta_steps if steps is None else steps
+      self.beta = min(self.beta_end, self.beta_start + self.beta_increment * steps)
+
     def push(self, I, states, values, actions, log_probs, returns):
         """Store a transition in the buffer."""
+        max_priority = self.priorities.max() if self.size > 0 else 1.0
+
         self.I[self.pos : self.pos + self.n_envs] = I
         self.states[self.pos : self.pos + self.n_envs] = states
         self.values[self.pos : self.pos + self.n_envs] = values
         self.actions[self.pos : self.pos + self.n_envs] = actions
         self.log_probs[self.pos : self.pos + self.n_envs] = log_probs
         self.returns[self.pos : self.pos + self.n_envs] = returns
+        self.priorities[self.pos : self.pos + self.n_envs] = max_priority
 
         self.pos = (self.pos + self.n_envs) % self.capacity
         self.size = min(self.size + self.n_envs, self.capacity)
     
     def sample(self, batch_size):
-        """Sample a random batch of transitions."""
-        indices = self.rng.choice(self.size, size=batch_size, replace=False, shuffle=True)
+        """Sample a batch of transitions based on priorities."""
+        if self.size == 0:
+            raise ValueError("Replay buffer is empty!")
+
+        # Calculate probabilities using priorities
+        scaled_priorities = self.priorities[:self.size] ** self.alpha
+        sampling_probabilities = scaled_priorities / scaled_priorities.sum()
+
+        # Sample indices based on probabilities
+        indices = self.rng.choice(self.size, size=batch_size, p=sampling_probabilities.cpu().numpy(), replace=False,)
+
+        # Compute importance sampling weights
+        total_prob = sampling_probabilities[indices]
+        weights = (self.size * total_prob) ** (-self.beta)
+        weights /= weights.max()  # Normalize for stability
+
         return (
             self.I[indices],
             self.states[indices],
@@ -53,10 +103,18 @@ class ReplayBuffer:
             self.actions[indices],
             self.log_probs[indices],
             self.returns[indices],
+            indices,  # Return sampled indices to update priorities later
+            weights,
         )
+
+    def update_priorities(self, indices, td_errors):
+        """Update priorities for the sampled transitions."""
+        # New priorities are proportional to the absolute TD error
+        self.priorities[indices] = torch.abs(td_errors) + self.epsilon  # Add epsilon for stability
 
     def __len__(self):
         return self.size
+
 
 
 
@@ -137,11 +195,13 @@ class Critic(nn.Module):
 
 
 
-class PPO:
+class PPOPER:
     def __init__(self, env,
     actor_lr_start=1e-3, actor_lr_end=1e-5, actor_lr_decay=0.001, actor_decay="linear",
     critic_lr_start=1e-3, critic_lr_end=1e-5, critic_lr_decay=0.001, critic_decay="linear",
     buffer_size=256, batch_size=64,
+    alpha_start=0.6, alpha_end=0.8, alpha_increment=1e-3,
+    beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
     r_clip_epsilon=0.1, v_clip_epsilon=0.1, entropy_coef=0.01,
     gamma=0.99, seed=None, verbose=False):
         self.env = env
@@ -171,7 +231,6 @@ class PPO:
 
         self.r_clip_epsilon = r_clip_epsilon
         self.v_clip_epsilon = v_clip_epsilon
-
         self.entropy_coef = entropy_coef
         self.gamma = gamma
 
@@ -200,9 +259,12 @@ class PPO:
         self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
         # self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
 
-        # Replay Buffer
-        self.buffer = ReplayBuffer(capacity=buffer_size, n_envs=self.env.n_envs,
-                                   state_dim=self.state_dim, seed=self.seed)
+        # Prioritized Replay Buffer
+        self.buffer = PrioritizedReplayBuffer(capacity=buffer_size, n_envs=self.env.n_envs,
+                                   state_dim=self.state_dim, 
+                                   alpha_start=0.6, alpha_end=0.8, alpha_increment=1e-3,
+                                   beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
+                                   seed=self.seed)
 
         self.steps = 0
 
@@ -294,8 +356,8 @@ class PPO:
 
             if len(self.buffer) > self.batch_size:
                 # Sample from replay buffer with PER
-                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = self.buffer.sample(self.batch_size)
-                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets = mb_I.to(self.device), mb_states.to(self.device), mb_states_value_old.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device)
+                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets, indices, weights = self.buffer.sample(self.batch_size)
+                mb_I, mb_states, mb_states_value_old, mb_actions, mb_log_probs_old, mb_targets, weights = mb_I.to(self.device), mb_states.to(self.device), mb_states_value_old.to(self.device), mb_actions.to(self.device), mb_log_probs_old.to(self.device), mb_targets.to(self.device), weights.to(self.device)
 
                 mb_states_value = self.critic(mb_states)
                 mb_actions_logits = self.actor(mb_states)
@@ -310,7 +372,7 @@ class PPO:
                 clipped_values = mb_states_value_old + torch.clamp(mb_states_value - mb_states_value_old, -self.v_clip_epsilon, self.v_clip_epsilon)
                 vf_loss_clipped = (mb_targets - clipped_values) ** 2
                 # Final value function loss:
-                critic_loss = 0.5 * torch.mean(torch.max(vf_loss_unclipped, vf_loss_clipped))
+                critic_loss = 0.5 * torch.mean(weights * torch.max(vf_loss_unclipped, vf_loss_clipped))
                 self.critic_optimizer.zero_grad()
                 critic_loss.backward()
                 self.critic_optimizer.step()
@@ -321,11 +383,18 @@ class PPO:
                 ratio = torch.exp(mb_log_probs - mb_log_probs_old)
                 surr1 = ratio * mb_advantages
                 surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
-                actor_loss = (- torch.pow(self.gamma, mb_I) * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
+                actor_loss = (- torch.pow(self.gamma, mb_I) * weights * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
                 self.actor_optimizer.step()
                 self.actor_scheduler.step()
+
+                # Update priorities in replay buffer
+                self.buffer.update_priorities(indices, mb_advantages.detach().cpu().squeeze())
+
+                # Update beta for PER
+                self.buffer.update_alpha()
+                self.buffer.update_beta()
 
             I = next_I
             states = next_states
