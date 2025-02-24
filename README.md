@@ -45,5 +45,8 @@ Also, you can find various RL algorithms under the "tabular.rl-algorithms.agents
     7. Advantage Actor-Critic (A2C)
     8. N-step Advantage Actor-Critic (A2C)
     9. Advantage Actor-Critic (A2C) with Generalized Advantage Estimation (GAE) (n-step lambda-return)
+    10. Proximal Policy Optimization (PPO)
+    11. N-step Proximal Policy Optimization (PPO)
+    12. Proximal Policy Optimization (PPO) with Generalized Advantage Estimation (GAE) (n-step lambda-return)
   
 You can run and evaluate different algorithms on the FrozenLake environment using the "run_tabular.py" and "run_function_approximation.py" modules on the root directory.
