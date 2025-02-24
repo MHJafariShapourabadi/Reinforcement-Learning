@@ -15,7 +15,7 @@ from function_approximation.environments.frozen_lake.wrappers import FrozenLakeV
 from function_approximation.rl_algorithms.exploration import GreedyExploration, EpsilonGreedyExploration, SoftmaxExploration
 from function_approximation.rl_algorithms.agents import PERDuelingDoubleDeepNStepTreeBackup, DuelingDoubleDeepQNetwork,\
     PERDuelingDoubleDeepQNetwork, PERDuelingDoubleDeepSarsa, PERDuelingDoubleDeepNStepSarsa, REINFORCE,\
-    REINFORCEWithBaseline, ActorCritic, NStepActorCritic, ActorCriticGAE, A3C, NStepA3C, A3CGAE
+    REINFORCEWithBaseline, ActorCritic, NStepActorCritic, ActorCriticGAE
 from function_approximation.environments.frozen_lake.utils import run_and_display_env
 from function_approximation.environments.frozen_lake.utils import run_and_display_env, run_and_record_env, play_videos, remove_videos
 from function_approximation.environments.frozen_lake.utils import plot_with_matplotlib, plot_with_seaborn, plot_q_values_map
@@ -65,129 +65,31 @@ if __name__ == "__main__":
     modified_env = env_class.create_env()
 
     print(modified_env)
-    print(modified_env.env)
-    print(modified_env.env.env)
     print(modified_env.observation_space.n)
     print(modified_env.observation_shape)
     print(modified_env.action_space.n)
 
     # %%
 
-    # exploration = SoftmaxExploration(
-    #     temperature_start=1.0,
-    #     temperature_end=0.1,
-    #     temperature_decay=None,
-    #     decay="linear",
-    #     seed=None
-    # )
+    # Choose exploration
 
-    # exploration = EpsilonGreedyExploration(
-    #     epsilon_start=0.5,
-    #     epsilon_end=0.1,
-    #     epsilon_decay=0.001,
-    #     decay="linear",
-    #     seed=None
-    # )
+    # exploration = SoftmaxExploration(temperature_start=1.0, temperature_end=0.1, temperature_decay=None, decay="linear", seed=None)
+    exploration = EpsilonGreedyExploration(epsilon_start=0.5,epsilon_end=0.1,epsilon_decay=0.001,decay="linear",seed=None)
 
-    # agent = PERDuelingDoubleDeepNStepTreeBackup(
-    #     env=modified_env,
-    #     exploration=exploration,
-    #     n_step=5,
-    #     lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear",
-    #     gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.05,
-    #     alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
-    #     beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
-    #     seed=None, verbose=True
-    # )
+    # Choose agent
 
-    # agent = DuelingDoubleDeepQNetwork(
-    #     env=modified_env,
-    #     exploration=exploration, 
-    #     lr_start=0.5, lr_end=0.005, lr_decay=0.001, decay="linear", 
-    #     gamma=0.99, Huberbeta=1.0, buffer_size=5000, batch_size=512, polyak_tau=1.0, 
-    #     seed=None, verbose=False
-    # )
+    agent = PERDuelingDoubleDeepNStepTreeBackup(env=modified_env, exploration=exploration, n_step=5, lr_start=0.5, lr_end=0.001, lr_decay=0.0001, decay="linear", gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.05, alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3,  beta_start=0.4, beta_end=1.0, beta_increment=1e-4, seed=None, verbose=True)
+    # agent = DuelingDoubleDeepQNetwork(env=modified_env, exploration=exploration, lr_start=0.5, lr_end=0.005, lr_decay=0.001, decay="linear",  gamma=0.99, Huberbeta=1.0, buffer_size=5000, batch_size=512, polyak_tau=1.0,  seed=None, verbose=False)
+    # agent = PERDuelingDoubleDeepQNetwork(env=modified_env, exploration=exploration, lr_start=0.1, lr_end=0.0005, lr_decay=0.00001, decay="linear", gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.01, alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3,  beta_start=0.4, beta_end=1.0, beta_increment=1e-4, seed=None, verbose=True)
+    # agent = PERDuelingDoubleDeepSarsa(env=modified_env, exploration=exploration, lr_start=0.5, lr_end=0.01, lr_decay=0.0001, decay="linear", gamma=0.99, Huberbeta=1.0, buffer_size=5000, batch_size=512, polyak_tau=0.5, alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3,  beta_start=0.4, beta_end=1.0, beta_increment=1e-4, seed=None, verbose=True)
+    # agent = PERDuelingDoubleDeepNStepSarsa(env=modified_env, exploration=exploration, n_step=5, lr_start=0.5, lr_end=0.01, lr_decay=0.0001, decay="linear", gamma=0.99, Huberbeta=1.0, buffer_size=5000, batch_size=512, polyak_tau=0.5, alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3,  beta_start=0.4, beta_end=1.0, beta_increment=1e-4, seed=None, verbose=True)
 
-    # agent = PERDuelingDoubleDeepQNetwork(
-    #     env=modified_env,
-    #     exploration=exploration,
-    #     lr_start=0.1, lr_end=0.0005, lr_decay=0.00001, decay="linear",
-    #     gamma=0.99, Huberbeta=1.0, buffer_size=2048, batch_size=512, polyak_tau=0.01,
-    #     alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
-    #     beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
-    #     seed=None, verbose=True
-    # )
+    # agent = REINFORCE(env=modified_env, lr_start=0.1, lr_end=0.01, lr_decay=0.005, decay="exponential", gamma=0.99, seed=None, verbose=False)
+    # agent = REINFORCEWithBaseline(env=modified_env, policy_lr_start=1e-1, policy_lr_end=1e-2, policy_lr_decay=0.005, policy_decay="exponential", value_lr_start=1e-1, value_lr_end=1e-2, value_lr_decay=0.005, value_decay="exponential", entropy_coef=0.00001, Huberbeta=1.0, gamma=0.99, seed=None, verbose=False)
 
-    # agent = PERDuelingDoubleDeepSarsa(
-    #     env=modified_env,
-    #     exploration=exploration,
-    #     lr_start=0.5, lr_end=0.01, lr_decay=0.0001, decay="linear",
-    #     gamma=0.99, Huberbeta=1.0, buffer_size=5000, batch_size=512, polyak_tau=0.5,
-    #     alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
-    #     beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
-    #     seed=None, verbose=True
-    # )
-
-    # agent = PERDuelingDoubleDeepNStepSarsa(
-    #     env=modified_env,
-    #     exploration=exploration,
-    #     n_step=5,
-    #     lr_start=0.5, lr_end=0.01, lr_decay=0.0001, decay="linear",
-    #     gamma=0.99, Huberbeta=1.0, buffer_size=5000, batch_size=512, polyak_tau=0.5,
-    #     alpha_start=0.6, alpha_end=0.9, alpha_increment=1e-3, 
-    #     beta_start=0.4, beta_end=1.0, beta_increment=1e-4,
-    #     seed=None, verbose=True
-    # )
-
-    # agent = REINFORCE(
-    #     env=modified_env,
-    #     lr_start=0.1, lr_end=0.01, lr_decay=0.005, decay="exponential",
-    #     gamma=0.99,
-    #     seed=None, verbose=False
-    # )
-
-    # agent = REINFORCEWithBaseline(
-    #     env=modified_env,
-    #     policy_lr_start=1e-1, policy_lr_end=1e-2, policy_lr_decay=0.005, policy_decay="exponential",
-    #     value_lr_start=1e-1, value_lr_end=1e-2, value_lr_decay=0.005, value_decay="exponential",
-    #     entropy_coef=0.00001, Huberbeta=1.0,
-    #     gamma=0.99,
-    #     seed=None, verbose=False
-    # )
-
-    # agent = ActorCritic(
-    #     env_class=env_class,
-    #     input_dim=modified_env.observation_shape[0], 
-    #     action_dim=modified_env.action_space.n,
-    #     actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential",
-    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-    #     seed=None, verbose=False
-    # )
-
-    # agent = NStepActorCritic(
-    #     env_class=env_class,
-    #     input_dim=modified_env.observation_shape[0], 
-    #     action_dim=modified_env.action_space.n,
-    #     n_step=5,
-    #     actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential",
-    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-    #     seed=None, verbose=False
-    # )
-
-    # agent = ActorCriticGAE(
-    #     env_class=env_class,
-    #     input_dim=modified_env.observation_shape[0], 
-    #     action_dim=modified_env.action_space.n,
-    #     n_step=5, lambd = 0.95,
-    #     actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential",
-    #     critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential",
-    #     gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, 
-    #     seed=None, verbose=False
-    # )
-
-
+    # agent = ActorCritic(env_class=env_class, input_dim=modified_env.observation_shape[0], action_dim=modified_env.action_space.n, actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential", critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential", gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0, seed=None, verbose=False)
+    # agent = NStepActorCritic(env_class=env_class, input_dim=modified_env.observation_shape[0], action_dim=modified_env.action_space.n, n_step=5, actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential", critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential", gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0,  seed=None, verbose=False)
+    # agent = ActorCriticGAE(env_class=env_class, input_dim=modified_env.observation_shape[0], action_dim=modified_env.action_space.n, n_step=5, lambd = 0.95, actor_lr_start=1e-2, actor_lr_end=1e-3, actor_lr_decay=0.00005, actor_decay="exponential", critic_lr_start=1e-2, critic_lr_end=1e-3, critic_lr_decay=0.00005, critic_decay="exponential", gamma=0.99, entropy_coef=0.0001, Huberbeta=1.0,  seed=None, verbose=False)
 
 
     # %%
@@ -207,11 +109,11 @@ if __name__ == "__main__":
 
     all_states_vectors = torch.tensor(modified_env.state_to_vector, dtype=torch.float32, device=agent.device)
 
-    # For other methods except Actor-Critic and A3C:
-    # qtable = agent.policy_net(all_states_vectors).detach().cpu().numpy()
+    # For other methods except Actor-Critic:
+    qtable = agent.policy_net(all_states_vectors).detach().cpu().numpy()
 
     # For other Actor-Critic methods:
-    qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
+    # qtable = agent.actor(all_states_vectors).detach().cpu().numpy()
 
     plot_q_values_map(
             qtable=qtable, 
