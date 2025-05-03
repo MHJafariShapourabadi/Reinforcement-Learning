@@ -59,7 +59,7 @@ class PrioritizedReplayBuffer:
     def update_alpha(self, steps=None):
       self.alpha_steps += 1
       steps = self.alpha_steps if steps is None else steps
-      self.beta = min(self.alpha_end, self.alpha_start + self.alpha_increment * steps)
+      self.alpha = min(self.alpha_end, self.alpha_start + self.alpha_increment * steps)
 
     def update_beta(self, steps=None):
       self.beta_steps += 1
@@ -130,7 +130,7 @@ class SpecialDeque:
     def __init__(self, maxlen):
         self.maxlen = maxlen
         self.list = [None] * maxlen
-        self.last_item = None
+        # self.last_item = None
         self.start_idx = 0
         self.end_idx = 0
         self.size = 0
@@ -147,8 +147,8 @@ class SpecialDeque:
         if self.full:
             self.start_idx = self.end_idx
 
-    def append_last(self, value):
-        self.last_item = value
+    # def append_last(self, value):
+    #     self.last_item = value
 
     def popleft(self):
         if self.empty:
@@ -162,13 +162,17 @@ class SpecialDeque:
         return value
 
     def __getitem__(self, index):
-        if index == self.maxlen:
-            return self.last_item
-        else:
-            if index > self.maxlen or index < - self.maxlen:
-                raise IndexError("Index out of deque range.")
-            index = (index + self.start_idx) % self.maxlen
-            return self.list[index]
+        if index >= self.maxlen or index < - self.maxlen:
+            raise IndexError("Index out of deque range.")
+        index = (index + self.start_idx) % self.maxlen
+        return self.list[index]
+        # if index == self.maxlen:
+        #     return self.last_item
+        # else:
+        #     if index > self.maxlen or index < - self.maxlen:
+        #         raise IndexError("Index out of deque range.")
+        #     index = (index + self.start_idx) % self.maxlen
+        #     return self.list[index]
 
     def __len__(self):
         return self.size
@@ -390,6 +394,7 @@ class PPOGAEPER:
 
         n_states = SpecialDeque(maxlen=self.n_step)
         n_values = SpecialDeque(maxlen=self.n_step)
+        n_next_values = SpecialDeque(maxlen=self.n_step)
         n_actions = SpecialDeque(maxlen=self.n_step)
         n_log_probs = SpecialDeque(maxlen=self.n_step)
         n_entropies = SpecialDeque(maxlen=self.n_step)
@@ -421,7 +426,7 @@ class PPOGAEPER:
 
             n_states.append(states)
             n_values.append(states_value.detach())
-            n_values.append_last(next_states_value)
+            n_next_values.append(next_states_value)
             n_actions.append(actions.detach())
             n_log_probs.append(log_probs.detach())
             n_rewards.append(rewards)
@@ -431,7 +436,7 @@ class PPOGAEPER:
             if t >= self.n_step - 1:
                 targets = 0.0
                 for i in reversed(range(self.n_step)):
-                    td_errors = n_rewards[i] + self.gamma * n_values[i + 1].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
+                    td_errors = n_rewards[i] + self.gamma * n_next_values[i].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
                     targets = (1.0 - n_terminateds[i]) * targets + ((self.gamma * self.lambd) ** i) * td_errors
                 targets += n_values[0].detach().clone()
 
@@ -461,19 +466,21 @@ class PPOGAEPER:
                     self.critic_optimizer.step()
                     self.critic_scheduler.step()
 
-                    # Compute ratio.
-                    mb_advantages = mb_targets - mb_states_value.detach()
-                    ratio = torch.exp(mb_log_probs - mb_log_probs_old)
-                    surr1 = ratio * mb_advantages
-                    surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
-                    actor_loss = (- torch.pow(self.gamma, mb_I) * weights * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
+                    # Compute ratios.
+                    mb_advantages = mb_targets - mb_states_value_old.detach()
+                    ratios = torch.exp(mb_log_probs - mb_log_probs_old)
+                    surr1 = ratios * mb_advantages
+                    surr2 = torch.clamp(ratios, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
+                    surr = torch.min(surr1, surr2)
+                    actor_loss = (- torch.pow(self.gamma, mb_I) * weights * surr - self.entropy_coef * mb_entropies).mean()
                     self.actor_optimizer.zero_grad()
                     actor_loss.backward()
                     self.actor_optimizer.step()
                     self.actor_scheduler.step()
 
                     # Update priorities in replay buffer
-                    self.buffer.update_priorities(indices, mb_advantages.detach().cpu().squeeze())
+                    # self.buffer.update_priorities(indices, mb_advantages.detach().cpu().squeeze())
+                    self.buffer.update_priorities(indices, (mb_advantages.detach() - surr.detach()).cpu().squeeze())
 
                     # Update beta for PER
                     self.buffer.update_alpha()

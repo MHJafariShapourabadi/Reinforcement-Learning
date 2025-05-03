@@ -57,7 +57,7 @@ class PrioritizedReplayBuffer:
     def update_alpha(self, steps=None):
       self.alpha_steps += 1
       steps = self.alpha_steps if steps is None else steps
-      self.beta = min(self.alpha_end, self.alpha_start + self.alpha_increment * steps)
+      self.alpha = min(self.alpha_end, self.alpha_start + self.alpha_increment * steps)
 
     def update_beta(self, steps=None):
       self.beta_steps += 1
@@ -207,6 +207,7 @@ class PPOPER:
         self.env = env
         self.state_dim = self.env.observation_space.shape[0]
         self.action_dim = self.env.action_space.n
+        self.lambd = lambd
 
         # Validate the actor decay type
         if actor_decay not in {"linear", "exponential", "reciprocal"}:
@@ -231,6 +232,7 @@ class PPOPER:
 
         self.r_clip_epsilon = r_clip_epsilon
         self.v_clip_epsilon = v_clip_epsilon
+
         self.entropy_coef = entropy_coef
         self.gamma = gamma
 
@@ -379,11 +381,12 @@ class PPOPER:
                 self.critic_scheduler.step()
 
                 # Compute ratio.
-                mb_advantages = mb_targets - mb_states_value.detach()
+                mb_advantages = mb_targets - mb_states_value_old.detach()
                 ratio = torch.exp(mb_log_probs - mb_log_probs_old)
                 surr1 = ratio * mb_advantages
                 surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
-                actor_loss = (- torch.pow(self.gamma, mb_I) * weights * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
+                surr = torch.min(surr1, surr2)
+                actor_loss = (- torch.pow(self.gamma, mb_I) * weights * surr - self.entropy_coef * mb_entropies).mean()
                 self.actor_optimizer.zero_grad()
                 actor_loss.backward()
                 self.actor_optimizer.step()
@@ -391,6 +394,7 @@ class PPOPER:
 
                 # Update priorities in replay buffer
                 self.buffer.update_priorities(indices, mb_advantages.detach().cpu().squeeze())
+                # self.buffer.update_priorities(indices, (mb_advantages.detach() - surr.detach()).cpu().squeeze())
 
                 # Update beta for PER
                 self.buffer.update_alpha()

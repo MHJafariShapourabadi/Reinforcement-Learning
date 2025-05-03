@@ -6,7 +6,7 @@ from torch.distributions.categorical import Categorical
 import numpy as np
 import time
 import gc
-from collections import deque
+# from collections import deque
 from itertools import count
 
 
@@ -20,7 +20,7 @@ class SpecialDeque:
     def __init__(self, maxlen):
         self.maxlen = maxlen
         self.list = [None] * maxlen
-        self.last_item = None
+        # self.last_item = None
         self.start_idx = 0
         self.end_idx = 0
         self.size = 0
@@ -37,8 +37,8 @@ class SpecialDeque:
         if self.full:
             self.start_idx = self.end_idx
 
-    def append_last(self, value):
-        self.last_item = value
+    # def append_last(self, value):
+    #     self.last_item = value
 
     def popleft(self):
         if self.empty:
@@ -52,13 +52,17 @@ class SpecialDeque:
         return value
 
     def __getitem__(self, index):
-        if index == self.maxlen:
-            return self.last_item
-        else:
-            if index > self.maxlen or index < - self.maxlen:
-                raise IndexError("Index out of deque range.")
-            index = (index + self.start_idx) % self.maxlen
-            return self.list[index]
+        if index >= self.maxlen or index < - self.maxlen:
+            raise IndexError("Index out of deque range.")
+        index = (index + self.start_idx) % self.maxlen
+        return self.list[index]
+        # if index == self.maxlen:
+        #     return self.last_item
+        # else:
+        #     if index > self.maxlen or index < - self.maxlen:
+        #         raise IndexError("Index out of deque range.")
+        #     index = (index + self.start_idx) % self.maxlen
+        #     return self.list[index]
 
     def __len__(self):
         return self.size
@@ -265,11 +269,13 @@ class A2CGAE:
         self.steps = 0
 
         n_values = SpecialDeque(maxlen=self.n_step)
+        n_next_values = SpecialDeque(maxlen=self.n_step)
         n_log_probs = SpecialDeque(maxlen=self.n_step)
         n_entropies = SpecialDeque(maxlen=self.n_step)
         n_rewards = SpecialDeque(maxlen=self.n_step)
         n_I = SpecialDeque(maxlen=self.n_step)
         n_terminateds = SpecialDeque(maxlen=self.n_step)
+        n_dones = SpecialDeque(maxlen=self.n_step)
 
         episodes = 0
         I, states, infos = self.env.reset()
@@ -287,26 +293,30 @@ class A2CGAE:
 
             next_I, next_states, rewards, terminateds, truncateds, next_infos = self.env.step(actions.cpu().numpy())
 
+            dones = np.logical_or(terminateds, truncateds)
+
             next_I = torch.tensor(next_I, dtype=torch.float32).to(self.device)
             next_states = torch.tensor(next_states, dtype=torch.float32).to(self.device)
             rewards = torch.tensor(rewards, dtype=torch.float32).to(self.device)
             terminateds = torch.tensor(terminateds, dtype=torch.float32).to(self.device)
+            dones = torch.tensor(dones, dtype=torch.float32).to(self.device)
             with torch.no_grad():
                 next_states_value = self.critic(next_states).detach()
 
             n_values.append(states_value)
-            n_values.append_last(next_states_value)
+            n_next_values.append(next_states_value)
             n_log_probs.append(log_probs)
             n_entropies.append(entropies)
             n_rewards.append(rewards)
             n_I.append(I)
             n_terminateds.append(terminateds)
+            n_dones.append(dones)
             
             if t >= self.n_step - 1:
                 targets = 0.0
                 for i in reversed(range(self.n_step)):
-                    td_errors = n_rewards[i] + self.gamma * n_values[i + 1].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
-                    targets = (1.0 - n_terminateds[i]) * targets + ((self.gamma * self.lambd) ** i) * td_errors
+                    td_errors = n_rewards[i] + self.gamma * n_next_values[i].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
+                    targets = (1.0 - n_dones[i]) * targets + ((self.gamma * self.lambd) ** i) * td_errors
                 targets += n_values[0].detach().clone()
                 
                 states_value = n_values[0]

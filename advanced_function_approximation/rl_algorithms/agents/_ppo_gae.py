@@ -73,7 +73,7 @@ class SpecialDeque:
     def __init__(self, maxlen):
         self.maxlen = maxlen
         self.list = [None] * maxlen
-        self.last_item = None
+        # self.last_item = None
         self.start_idx = 0
         self.end_idx = 0
         self.size = 0
@@ -90,8 +90,8 @@ class SpecialDeque:
         if self.full:
             self.start_idx = self.end_idx
 
-    def append_last(self, value):
-        self.last_item = value
+    # def append_last(self, value):
+    #     self.last_item = value
 
     def popleft(self):
         if self.empty:
@@ -105,13 +105,17 @@ class SpecialDeque:
         return value
 
     def __getitem__(self, index):
-        if index == self.maxlen:
-            return self.last_item
-        else:
-            if index > self.maxlen or index < - self.maxlen:
-                raise IndexError("Index out of deque range.")
-            index = (index + self.start_idx) % self.maxlen
-            return self.list[index]
+        if index >= self.maxlen or index < - self.maxlen:
+            raise IndexError("Index out of deque range.")
+        index = (index + self.start_idx) % self.maxlen
+        return self.list[index]
+        # if index == self.maxlen:
+        #     return self.last_item
+        # else:
+        #     if index > self.maxlen or index < - self.maxlen:
+        #         raise IndexError("Index out of deque range.")
+        #     index = (index + self.start_idx) % self.maxlen
+        #     return self.list[index]
 
     def __len__(self):
         return self.size
@@ -328,6 +332,7 @@ class PPOGAE:
 
         n_states = SpecialDeque(maxlen=self.n_step)
         n_values = SpecialDeque(maxlen=self.n_step)
+        n_next_values = SpecialDeque(maxlen=self.n_step)
         n_actions = SpecialDeque(maxlen=self.n_step)
         n_log_probs = SpecialDeque(maxlen=self.n_step)
         n_entropies = SpecialDeque(maxlen=self.n_step)
@@ -359,7 +364,7 @@ class PPOGAE:
 
             n_states.append(states)
             n_values.append(states_value.detach())
-            n_values.append_last(next_states_value)
+            n_next_values.append(next_states_value)
             n_actions.append(actions.detach())
             n_log_probs.append(log_probs.detach())
             n_rewards.append(rewards)
@@ -369,7 +374,7 @@ class PPOGAE:
             if t >= self.n_step - 1:
                 targets = 0.0
                 for i in reversed(range(self.n_step)):
-                    td_errors = n_rewards[i] + self.gamma * n_values[i + 1].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
+                    td_errors = n_rewards[i] + self.gamma * n_next_values[i].detach() * (1.0 - n_terminateds[i]) - n_values[i].detach()
                     targets = (1.0 - n_terminateds[i]) * targets + ((self.gamma * self.lambd) ** i) * td_errors
                 targets += n_values[0].detach().clone()
 
@@ -400,11 +405,12 @@ class PPOGAE:
                     self.critic_scheduler.step()
 
                     # Compute ratio.
-                    mb_advantages = mb_targets - mb_states_value.detach()
+                    mb_advantages = mb_targets - mb_states_value_old.detach()
                     ratio = torch.exp(mb_log_probs - mb_log_probs_old)
                     surr1 = ratio * mb_advantages
                     surr2 = torch.clamp(ratio, 1 - self.r_clip_epsilon, 1 + self.r_clip_epsilon) * mb_advantages
-                    actor_loss = (- torch.pow(self.gamma, mb_I) * torch.min(surr1, surr2) - self.entropy_coef * mb_entropies).mean()
+                    surr = torch.min(surr1, surr2)
+                    actor_loss = (- torch.pow(self.gamma, mb_I) * surr - self.entropy_coef * mb_entropies).mean()
                     self.actor_optimizer.zero_grad()
                     actor_loss.backward()
                     self.actor_optimizer.step()

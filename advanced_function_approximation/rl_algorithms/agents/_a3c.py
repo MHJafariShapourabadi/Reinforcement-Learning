@@ -11,15 +11,57 @@ import gc
 
 
 
-class SahredLambdaLRScheduler(optim.lr_scheduler.LambdaLR):
-    def __init__(self, optimizer, lr_lambda, *args, **kwargs):
-        super(SahredLambdaLRScheduler, self).__init__(optimizer=optimizer, lr_lambda=lr_lambda, *args, **kwargs)
-        self.last_epoch = torch.tensor(self.last_epoch).share_memory_()
+
+
+class SharedLambdaLR(LambdaLR):
+    def __init__(self, optimizer, lr_lambda, last_epoch=-1, verbose=False):
+        super().__init__(optimizer, lr_lambda, last_epoch, verbose)
+        # Replace int last_epoch with shared 0-dim tensor
+        tensor_last_epoch = torch.tensor(self.last_epoch, dtype=torch.int64)
+        tensor_last_epoch.share_memory_()
+        self._last_epoch = tensor_last_epoch
+        del self.last_epoch  # hide the base int
 
     def _initial_step(self):
-        """Initialize step counts and perform a step."""
-        self._step_count = torch.zeros(1).share_memory_()
-        self.step()
+        # Use 0-dim tensor for step_count
+        tensor_step_count = torch.tensor(0, dtype=torch.int64)
+        tensor_step_count.share_memory_()
+        self._step_count = tensor_step_count
+
+        epoch = int(self._last_epoch.item())
+        super().step(epoch)
+
+    def step(self, epoch=None):
+        # Advance shared counter
+        if epoch is None:
+            e = int(self._last_epoch.item()) + 1
+        else:
+            e = epoch
+        self._last_epoch.fill_(e)
+        super().step(e)
+
+    @property
+    def last_epoch(self):
+        return int(self._last_epoch.item())
+
+    def share_memory(self):
+        """Re-share tensors after load or spawn."""
+        self._last_epoch.share_memory_()
+        self._step_count.share_memory_()
+
+
+
+
+
+# class SahredLambdaLRScheduler(optim.lr_scheduler.LambdaLR):
+#     def __init__(self, optimizer, lr_lambda, *args, **kwargs):
+#         super(SahredLambdaLRScheduler, self).__init__(optimizer=optimizer, lr_lambda=lr_lambda, *args, **kwargs)
+#         self.last_epoch = torch.tensor(self.last_epoch).share_memory_()
+
+#     def _initial_step(self):
+#         """Initialize step counts and perform a step."""
+#         self._step_count = torch.zeros(1).share_memory_()
+#         self.step()
 
 
 class SharedAdam(torch.optim.Adam):
@@ -218,7 +260,7 @@ class A3C:
         # self.actor_optimizer = SharedAdam(self.global_actor.parameters(), lr=actor_lr_start)
         self.actor_optimizer = SharedAdamW(self.global_actor.parameters(), lr=actor_lr_start, amsgrad=True)
         # self.actor_scheduler = optim.lr_scheduler.LambdaLR(self.actor_optimizer, lr_lambda=self.update_actor_learning_rate)
-        self.actor_scheduler = SahredLambdaLRScheduler(self.actor_optimizer, lr_lambda=self.update_actor_learning_rate)
+        self.actor_scheduler = SharedLambdaLR(self.actor_optimizer, lr_lambda=self.update_actor_learning_rate)
 
         # Optimizer for critic network
         # self.critic_optimizer = optim.Adam(self.global_critic.parameters(), lr=self.lr_start)
@@ -226,7 +268,7 @@ class A3C:
         # self.critic_optimizer = SharedAdam(self.global_critic.parameters(), lr=critic_lr_start)
         self.critic_optimizer = SharedAdamW(self.global_critic.parameters(), lr=critic_lr_start, amsgrad=True)
         # self.critic_scheduler = optim.lr_scheduler.LambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
-        self.critic_scheduler = SahredLambdaLRScheduler(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
+        self.critic_scheduler = SharedLambdaLR(self.critic_optimizer, lr_lambda=self.update_critic_learning_rate)
         self.critic_criterion = nn.SmoothL1Loss(beta=Huberbeta)
 
         self.steps = 0

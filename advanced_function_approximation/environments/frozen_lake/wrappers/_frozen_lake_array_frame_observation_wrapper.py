@@ -31,6 +31,9 @@ class FrozenLakeArrayFrameObservationWrapper(Wrapper):
         # s_slippery = self.env.get_wrapper_attr('spec').kwargs["is_slippery"]
 
         self.slip_epsilon = slip_epsilon
+        self.step_reward = step_reward
+        self.hole_reward = hole_reward
+        self.goal_reward = goal_reward
 
         self.desc = desc = self.env.unwrapped.desc
         # self.desc = desc = self.env.get_wrapper_attr('desc')
